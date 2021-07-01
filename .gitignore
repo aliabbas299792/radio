@@ -7,3 +7,7 @@ compile_commands.json
 **/emscripten_opus
 **/emsdk
 **/opus
+wasm_audio/main.js
+wasm_audio/main.wasm
+public/main.js
+public/main.wasm

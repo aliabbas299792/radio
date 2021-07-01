@@ -1,7 +1,9 @@
 .vscode
-public/**
 build
 .config
 .cache
 .clangd
 compile_commands.json
+**/emscripten_opus
+**/emsdk
+**/opus

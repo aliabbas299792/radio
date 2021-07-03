@@ -1,4 +1,6 @@
 #include "../header/web_server/web_server.h"
+#include "../header/audio_server.h"
+
 #include <thread>
 
 #include <sys/timerfd.h>
@@ -119,12 +121,13 @@ void central_web_server::add_event_read_req(int event_fd, central_web_server_eve
   io_uring_submit(&ring);
 }
 
-void central_web_server::add_read_req(int fd, size_t size){
+void central_web_server::add_read_req(int fd, size_t size, int custom_info){
   io_uring_sqe *sqe = io_uring_get_sqe(&ring); //get a valid SQE (correct index and all)
   auto *req = new central_web_server_req(); //enough space for the request struct
   req->buff.resize(size);
   req->event = central_web_server_event::READ;
   req->fd = fd;
+  req->custom_info = custom_info;
   
   io_uring_prep_read(sqe, fd, &(req->buff[0]), size, 0); //don't read at an offset
   io_uring_sqe_set_data(sqe, req);
@@ -180,44 +183,56 @@ template<server_type T>
 void central_web_server::run(int num_threads){
   std::cout << "Using " << num_threads << " threads\n";
 
-  // the main io_uring loop
 
+  // io_uring stuff
   std::memset(&ring, 0, sizeof(io_uring));
   io_uring_queue_init(QUEUE_DEPTH, &ring, 0); //no flags, setup the queue
-
   io_uring_cqe *cqe;
 
-  const auto make_ws_frame = config_data_map["TLS"] == "yes" ? web_server::basic_web_server<server_type::TLS>::make_ws_frame : web_server::basic_web_server<server_type::NON_TLS>::make_ws_frame;
 
+  // need to read on the kill efd, and make the server exit cleanly
+  add_event_read_req(kill_server_efd, central_web_server_event::KILL_SERVER);
+  bool run_server = true;
+
+
+  // server threads
   std::vector<server_data<T>> thread_data_container{};
   thread_data_container.resize(num_threads);
-
   int idx = 0;
   for(auto &thread_data : thread_data_container){
     // custom info is the idx of the server in the vector
     add_event_read_req(thread_data.server.central_communication_eventfd, central_web_server_event::SERVER_THREAD_COMMUNICATION, idx++); // add read for all thread events
   }
 
-  // need to read on the kill efd
-  add_event_read_req(kill_server_efd, central_web_server_event::KILL_SERVER);
-  
-  bool run_server = true;
 
-  // timer stuff
-  // time is relative to process starting time
+  // timer stuff - time is relative to process starting time
   int timer_fd = timerfd_create(CLOCK_MONOTONIC, 0);
+  utility::set_timerfd_interval(timer_fd, 5000); // 5s timer that (fires first event immediately)
+  add_timer_read_req(timer_fd); // arm the timer
 
-  // sets a 5s interval timer, starts with a delay of 5s
-  itimerspec timer_values;
-  timer_values.it_value.tv_sec = 1;
-  timer_values.it_value.tv_nsec = 0;
-  timer_values.it_interval.tv_sec = 1;
-  timer_values.it_interval.tv_nsec = 0;
-  timerfd_settime(timer_fd, 0, &timer_values, nullptr);
-  // arm the timer
-  add_timer_read_req(timer_fd);
 
-  int x = 0;
+  // audio server stuff
+  auto test_audio_server = audio_server("public/assets/audio/", "Test Server");
+  std::thread audio_thread([&test_audio_server] {
+    test_audio_server.run(); // run the audio server in another thread
+  });
+  // read on the various eventfds
+  add_event_read_req(test_audio_server.notify_audio_list_available, central_web_server_event::AUDIO_SERVER_COMMUNICATION);
+  add_event_read_req(test_audio_server.audio_list_update, central_web_server_event::AUDIO_SERVER_COMMUNICATION);
+  add_event_read_req(test_audio_server.file_request_fd, central_web_server_event::AUDIO_SERVER_COMMUNICATION);
+
+  test_audio_server.request_audio_list(); // put in a request for the audio list
+
+  struct {
+    std::unordered_set<std::string> file_set{};
+    std::string slash_separated_audio_list{};
+    
+    std::unordered_map<int, std::string> fd_to_filepath{};
+  } audio_data;
+
+
+  // shortcut for make_ws_frame
+  const auto make_ws_frame = web_server::basic_web_server<T>::make_ws_frame;
 
   while(run_server){
     char ret = io_uring_wait_cqe(&ring, &cqe);
@@ -250,9 +265,6 @@ void central_web_server::run(int num_threads){
 
         auto item_data = store.insert_item(std::move(ws_data), num_threads);
 
-        // you need to add something to deal with when a write request for broadcast is cancelled
-        // and then notify the central server that we don't need the buffer anymore
-
         for(auto &thread_data : thread_data_container)
           thread_data.server.post_message_to_server_thread(web_server::message_type::websocket_broadcast, reinterpret_cast<const char*>(item_data.buffer.ptr), item_data.buffer.size, item_data.idx);
 
@@ -271,6 +283,10 @@ void central_web_server::run(int num_threads){
       case central_web_server_event::READ:
         if(req->buff.size() == cqe->res + req->progress_bytes){
           // the entire thing has been read, add it to some local cache or something
+          if(audio_data.fd_to_filepath.count(req->fd)){ // send the file to the requester
+            test_audio_server.send_file_back_to_audio_server(audio_data.fd_to_filepath[req->fd], std::move(req->buff));
+            audio_data.fd_to_filepath.erase(req->fd);
+          }
         }else{
           read_req_continued(req, cqe->res);
           req = nullptr;
@@ -281,6 +297,39 @@ void central_web_server::run(int num_threads){
           write_req_continued(req, cqe->res);
         }else{
           // we're finished writing otherwise
+        }
+        break;
+      case central_web_server_event::AUDIO_SERVER_COMMUNICATION:
+        if(req->fd == test_audio_server.notify_audio_list_available){ // the initial data
+          auto data = test_audio_server.get_from_audio_file_list_data_queue();
+
+          for(const auto &file : data.file_list)
+            audio_data.file_set.insert(file);
+
+          audio_data.slash_separated_audio_list = data.appropriate_str;
+
+          add_event_read_req(test_audio_server.notify_audio_list_available, central_web_server_event::AUDIO_SERVER_COMMUNICATION);
+        }else if(req->fd == test_audio_server.audio_list_update){ // updates the initial data
+          auto data = test_audio_server.get_from_audio_file_list_data_queue();
+
+          if(data.addition){
+            audio_data.slash_separated_audio_list += "/"+data.appropriate_str;
+            audio_data.file_set.insert(data.appropriate_str);
+          }else{
+            audio_data.slash_separated_audio_list = utility::remove_from_slash_string(audio_data.slash_separated_audio_list, data.appropriate_str);
+            audio_data.file_set.erase(data.appropriate_str);
+          }
+
+          add_event_read_req(test_audio_server.audio_list_update, central_web_server_event::AUDIO_SERVER_COMMUNICATION);
+        }else if(req->fd == test_audio_server.file_request_fd){
+          auto data = test_audio_server.get_from_file_transfer_queue();
+
+          int fd = open(data.filepath.c_str(), O_RDONLY);
+          size_t size = utility::get_file_size(fd);
+          audio_data.fd_to_filepath[fd] = data.filepath;
+          add_read_req(fd, size); // add a read request for this file
+
+          add_event_read_req(test_audio_server.file_request_fd, central_web_server_event::AUDIO_SERVER_COMMUNICATION);
         }
         break;
     }
@@ -295,6 +344,8 @@ void central_web_server::run(int num_threads){
   // wait for all threads to exit before exiting the program
   for(auto &thread_data : thread_data_container)
     thread_data.thread.join();
+  
+  audio_thread.join();
 }
 
 void central_web_server::kill_server(){

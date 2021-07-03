@@ -176,7 +176,7 @@ namespace web_server{
   #include "../../web_server/websockets.tcc"
 }
 
-enum class central_web_server_event { TIMERFD, READ, WRITE, SERVER_THREAD_COMMUNICATION, KILL_SERVER };
+enum class central_web_server_event { TIMERFD, READ, WRITE, SERVER_THREAD_COMMUNICATION, AUDIO_SERVER_COMMUNICATION , KILL_SERVER };
 
 struct central_web_server_req {
   central_web_server_event event{};
@@ -219,7 +219,7 @@ private:
 
   void add_event_read_req(int eventfd, central_web_server_event event, uint64_t custom_info = 0); // adds io_uring read request for the eventfd
   void add_timer_read_req(int timerfd); // adds io_uring read request for the timerfd
-  void add_read_req(int fd, size_t size); // adds normal read request on io_uring
+  void add_read_req(int fd, size_t size, int custom_info = 0); // adds normal read request on io_uring
   void add_write_req(int fd, const char *buff_ptr, size_t size); // adds normal write request on io_uring
 
   // to finish off the requests

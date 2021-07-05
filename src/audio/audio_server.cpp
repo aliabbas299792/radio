@@ -2,12 +2,20 @@
 #include <chrono>
 #include <algorithm>
 #include <regex>
+#include "../vendor/json/single_include/nlohmann/json.hpp"
+
+using json = nlohmann::json;
 
 // initialise static variable
 std::vector<audio_server*> audio_server::audio_servers{};
+int audio_server::max_id = 0;
+std::unordered_map<std::string, int> audio_server::server_id_map{};
 
 audio_server::audio_server(std::string dir_path, std::string name){ // not thread safe
-  audio_server_name = name;
+  audio_server_name = utility::to_web_name(name); // only uses the web safe name
+  id = max_id++; // (also acts as an index into the vector below)
+  audio_servers.push_back(this); // push to static vector
+  server_id_map[audio_server_name] = id;
 
   dir_path = (dir_path.find_last_of("/") == dir_path.size() - 1) ? dir_path : dir_path + "/"; // ensures there's a slash at the end
   this->dir_path = dir_path;
@@ -45,6 +53,10 @@ audio_server::audio_server(std::string dir_path, std::string name){ // not threa
       }
     }
   }
+
+  audio_thread = std::thread([this] {
+    this->run(); // run the audio server in another thread
+  });
 }
 
 void audio_server::run(){
@@ -52,10 +64,8 @@ void audio_server::run(){
   io_uring_cqe *cqe;
   std::memset(&ring, 0, sizeof(io_uring));
   io_uring_queue_init(QUEUE_DEPTH, &ring, 0); //no flags, setup the queue
-
   
   // making sure it exits cleanly
-  audio_servers.push_back(this); // push to static vector
   fd_read_req(kill_efd, audio_events::KILL);
 
   // watching files/updating the server to reflect the directory correctly
@@ -65,11 +75,10 @@ void audio_server::run(){
   fd_read_req(file_ready_fd, audio_events::FILE_READY);
 
   // time stuff
-  utility::set_timerfd_interval(timerfd, 1000);
+  utility::set_timerfd_interval(timerfd, 5000);
   fd_read_req(timerfd, audio_events::BROADCAST_TIMER);
-  current_audio_start_time = std::chrono::system_clock::now();
-  current_audio_finish_time = current_audio_start_time;
-  last_broadcast_time = current_audio_start_time;
+  current_audio_finish_time = std::chrono::system_clock::now();
+  last_broadcast_time = current_audio_finish_time;
 
   char *strtok_saveptr{};
 
@@ -89,7 +98,8 @@ void audio_server::run(){
       case audio_events::FILE_READY: {
         auto file_ready_data = get_from_file_transfer_queue();
         std::cout << "FILE IS READY woohoo " << file_ready_data.filepath << "\n";
-
+        process_audio(std::move(file_ready_data));
+        
         fd_read_req(file_ready_fd, audio_events::FILE_READY);
         break;
       }
@@ -142,18 +152,29 @@ void audio_server::run(){
   close(broadcast_fd);
   close(file_ready_fd);
   close(file_request_fd);
-  close(audio_from_program_request_fd);
+  close(inotify_fd);
+  close(send_audio_list);
+  close(notify_audio_list_available);
+  close(audio_list_update);
+  close(timerfd);
   io_uring_queue_exit(&ring);
 }
 
+std::string audio_server::get_broadcast_audio(){
+  std::string output{};
+  broadcast_queue.try_dequeue(output);
+  return output;
+}
+
 void audio_server::broadcast_routine(){
-  if(currently_processing_audio == "" && current_audio_finish_time >= std::chrono::system_clock::now() - std::chrono::seconds(5)){
+  if(currently_processing_audio == "" && std::chrono::system_clock::now() >= current_audio_finish_time - std::chrono::seconds(5)){
     // if there are less than 5s till the end of this file, and nothing is currently being
     currently_processing_audio = get_requested_audio();
     if(currently_processing_audio == ""){ // if there was nothing in the requested queue
       if(audio_list.size() < 10)
         currently_processing_audio = audio_list[utility::random_number(0, audio_list.size()-1)]; // select a file at random
       else{
+        std::cout << audio_list.size() << "\n";
         // a very rough way of making sure you don't get repeats too often
         auto idx = utility::random_number(0, audio_list.size()-1); // select an index which hasn't been used for the previous 10 items
         while(last_10_items.count(idx)){
@@ -168,17 +189,100 @@ void audio_server::broadcast_routine(){
       }
     }
     // at this point currently_processing_audio is definitely not blank
-    // send_file_request_to_program(dir_path + currently_processing_audio + ".opus"); // requests a file to be read
+    send_file_request_to_program(dir_path + currently_processing_audio + ".opus"); // requests a file to be read
   }
-
-  static uint64_t count = 0;
-  auto now = std::chrono::system_clock::now();
-  printf("Difference: %6fms\n", double(int64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(now - last_broadcast_time).count()-count))/1000000);
-  count += 1000000000;
 
   // broadcast data here
   // just get the oldest chunk with chunks_of_audio.pop_front() and broadcast it, as audio_data
+  if(chunks_of_audio.size()){
+    auto chunk = chunks_of_audio.front();
+    chunks_of_audio.pop_front();
 
+    json data_pages{};
+    for(const auto &page : chunk.pages){
+      json data_page{};
+      data_page["duration"] = page.duration;
+      data_page["buff"] = page.buff;
+      data_pages.push_back(data_page);
+    }
+
+    json data_chunk{};
+    data_chunk["duration"] = chunk.duration;
+    data_chunk["pages"] = data_pages;
+
+    broadcast_to_central_server(data_chunk.dump());
+  }
+}
+
+void audio_server::broadcast_to_central_server(std::string &&data){
+  broadcast_queue.emplace(data);
+  eventfd_write(broadcast_fd, 1);
+}
+
+int audio_server::get_config_num(int num){
+  return (num >> 3) & 31;
+}
+
+int audio_server::get_frame_duration_ms(int config) {
+  if (config <= 11) {
+    const auto normalisedConfig = config % 4;
+    return audio_frame_durations.silkOnly[normalisedConfig];
+  }
+  else if (config <= 15) {
+    const auto normalisedConfig = config % 2;
+    return audio_frame_durations.hybrid[normalisedConfig];
+  }
+  else {
+    const auto normalisedConfig = config % 4;
+    return audio_frame_durations.celtOnly[normalisedConfig];
+  }
+}
+
+audio_byte_length_duration audio_server::get_ogg_page_info(char *buff){ // gets the ogg page length and duration
+  uint8_t *segments_table = reinterpret_cast<uint8_t*>(&buff[27]);
+  uint8_t segments_table_length = buff[26];
+  uint32_t segments_total_length{};
+  uint8_t *segments = reinterpret_cast<uint8_t*>(&buff[27 + segments_table_length]);
+
+  uint64_t length_ms{};
+  int16_t last_length_extended_page_segment = -1;
+
+  for(int i = 0; i < segments_table_length; i++){
+    if(segments_table[i] == 255){
+      last_length_extended_page_segment = get_frame_duration_ms(get_config_num(segments[segments_total_length]));
+    }else if(last_length_extended_page_segment != -1){
+      length_ms += last_length_extended_page_segment;
+      last_length_extended_page_segment = -1;
+    }else{
+      length_ms += get_frame_duration_ms(get_config_num(segments[segments_total_length]));
+    }
+
+    segments_total_length += segments_table[i];
+  }
+  
+  return { length_ms, 27 + segments_total_length + segments_table_length };
+}
+
+std::vector<audio_page_data> audio_server::get_audio_page_data(std::vector<char> &&buff){
+  std::vector<audio_page_data> page_vec{};
+
+  int read_head = 0;
+  int iter_num = 0;
+  size_t duration = 0;
+  while(read_head < buff.size()){
+    auto data = get_ogg_page_info(&buff[read_head]);
+
+    if(iter_num >= 2){
+      duration += data.duration;
+      page_vec.push_back({ std::vector<char>(&buff[read_head], &buff[read_head] + data.byte_length), data.duration });
+    }else{
+      iter_num++;
+    }
+
+    read_head += data.byte_length;
+  }
+
+  return page_vec;
 }
 
 void audio_server::process_audio(file_transfer_data &&data){
@@ -191,6 +295,39 @@ void audio_server::process_audio(file_transfer_data &&data){
 
   // firstly get the most recent chunk from chunks_of_audio.pop_back(), get its length and see if you can append some on to the end of it to get 5s chunk
   // then push that chunk, followed by the rest of the chunks
+  auto audio_data = get_audio_page_data(std::move(data.data));
+
+  int audio_data_idx = 0;
+
+  uint64_t duration_of_audio = 0;
+  for(const auto& page : audio_data)
+    duration_of_audio += page.duration;
+
+  if(chunks_of_audio.size() && chunks_of_audio.back().duration < AUDIO_CHUNK_LENGTH_MS){ // push to the most recent chunk if it's not full
+    auto &old_chunk = chunks_of_audio.back();
+    while(old_chunk.insert_data(std::move(audio_data[audio_data_idx++]))){
+      if(audio_data_idx == audio_data.size()) break; // don't wanna segfault by overstepping the boundaries
+    }
+    if(audio_data_idx != audio_data.size())
+      audio_data_idx--; // the reason that while loop broke was because the chunk was filled, so lower the idx again
+  }
+
+  while(audio_data_idx < audio_data.size()){
+    audio_chunk chunk{};
+    while(chunk.insert_data(std::move(audio_data[audio_data_idx++]))){ // fill the chunk up as much as possible
+      if(audio_data_idx == audio_data.size()) break; // don't wanna segfault by overstepping the boundaries
+    }
+    if(audio_data_idx != audio_data.size())
+      audio_data_idx--; // the reason that while loop broke was because the chunk was filled, so lower the idx again
+    chunks_of_audio.push_back(chunk);
+  }
+
+  std::cout << duration_of_audio << " ## " << "\n";
+
+  current_audio_finish_time += std::chrono::milliseconds(duration_of_audio);
+  currently_processing_audio = ""; // we've processed it
+
+  broadcast_routine();
 }
 
 void audio_server::respond_with_file_list(){
@@ -221,13 +358,13 @@ void audio_server::fd_read_req(int fd, audio_events event, size_t size){
   io_uring_submit(&ring);
 }
 
-void audio_server::kill_all_servers(){
-  for(auto server : audio_servers)
-    server->kill_server();
-}
-
 void audio_server::kill_server(){
   eventfd_write(kill_efd, 1); // kill the server
+}
+
+void audio_server::wait_for_clean_exit(){
+  for(auto server : audio_servers)
+    server->audio_thread.join();
 }
 
 void audio_server::send_file_request_to_program(const std::string &path){

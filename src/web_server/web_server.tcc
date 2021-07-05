@@ -5,17 +5,19 @@ using namespace web_server;
 
 template<server_type T>
 bool basic_web_server<T>::get_process(std::string &path, bool accept_bytes, const std::string& sec_websocket_key, int client_idx){
-  const auto original_path = path;
-
+  char *path_temp = strdup(path.c_str());
+  
   char *saveptr = nullptr;
-  const char* token = strtok_r((char*)path.c_str(), "/", &saveptr);
-  const char* subdir = token ? token : "";
+  char *token = strtok_r(path_temp, "/", &saveptr);
+  std::string subdir = token ? token : "";
 
-  if( (strlen(subdir) == 2 && strncmp(subdir, "ws", 2) == 0)  && sec_websocket_key != ""){
+  free(path_temp);
+
+  if(subdir == "ws"  && sec_websocket_key != ""){
     websocket_accept_read_cb(sec_websocket_key, path.substr(2), client_idx);
     return true;
   }else{
-    path = original_path == "" ? "public/index.html" : "public/"+original_path;
+    path = path == "" ? "public/index.html" : "public/"+path;
     
     if(send_file_request(client_idx, path, accept_bytes, 200))
       return true;
@@ -141,17 +143,15 @@ void basic_web_server<T>::new_tcp_client(int client_idx){
 }
 
 template<server_type T>
-void basic_web_server<T>::kill_client(int client_idx){
+void basic_web_server<T>::kill_client(int client_idx){ // be wary of this, I don't think this will cause issues, but maybe it's possible that a new websocket client is at that index already and could be an issue?
   web_cache.finished_with_item(client_idx, tcp_clients[client_idx]);
   tcp_clients[client_idx].using_file = false;
 
   int ws_client_idx = tcp_clients[client_idx].ws_client_idx;
   all_websocket_connections.erase(ws_client_idx); //connection definitely closed now
   
-  if(active_websocket_connections_client_idxs.count(client_idx)){ // i.e in the case this function is called with a currently open websocket
-    active_websocket_connections_client_idxs.erase(client_idx);
-    freed_indexes.insert(ws_client_idx);
-  }
+  active_websocket_connections_client_idxs.erase(client_idx);
+  freed_indexes.insert(ws_client_idx);
 }
 
 template<server_type T>

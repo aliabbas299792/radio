@@ -64,10 +64,19 @@ namespace utility{
     return -1;
   }
 
+  std::string to_web_name(std::string name){
+    auto new_name = name;
+    for(auto &character : new_name){
+      character = tolower(character);
+      if(character == ' ')
+        character = '_';
+    }
+    return new_name;
+  }
+
   void sigint_handler(int sig_number){
     std::cout << "\nShutting down...\n";
 
-    audio_server::kill_all_servers();
     central_web_server::instance().kill_server(); // the program gracefully exits without needing to explicitly exit
   }
 }

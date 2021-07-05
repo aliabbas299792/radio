@@ -8,12 +8,30 @@ void basic_web_server<T>::websocket_accept_read_cb(const std::string& sec_websoc
   const std::string accept_header_value = get_accept_header_value(sec_websocket_key);
   const auto resp = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + accept_header_value + "\r\n\r\n";
 
+  int ws_client_idx = new_ws_client(client_idx); //sets this index up as a new client
+  tcp_clients[client_idx].ws_client_idx = ws_client_idx;
+  auto ws_client_id = websocket_clients[ws_client_idx].id;
+
+  // post_message_to_program(message_type::new_radio_client, );
+
+  std::vector<std::string> subdirs{};
+
+  char *save_ptr{};
+  char *path_dup = strdup(path.c_str());
+  char *path_dup_original = path_dup;
+  char *path_part{};
+  while((path_part = strtok_r(path_dup, "/", &save_ptr)) != nullptr){
+    path_dup = nullptr;
+    subdirs.push_back(path_part);
+  }
+  free(path_dup_original);
+
   std::vector<char> send_buffer(resp.size());
   std::memcpy(&send_buffer[0], resp.c_str(), resp.size());
 
-  int ws_client_idx = new_ws_client(client_idx); //sets this index up as a new client
-
-  tcp_clients[client_idx].ws_client_idx = ws_client_idx;
+  if(subdirs.size() == 2 && subdirs[0] == "radio"){ // we don't keep a record of valid stations on this thread, ask the central thread
+    post_new_radio_client_to_program(subdirs[1], ws_client_idx, ws_client_id);
+  }
   
   tcp_server->write_connection(client_idx, std::move(send_buffer));
 }
@@ -69,6 +87,8 @@ void basic_web_server<T>::websocket_process_read_cb(int client_idx, char *buffer
 
         // put the code for interacting with websockets here
 
+
+
         /****************************************/
       }
 
@@ -108,7 +128,7 @@ int basic_web_server<T>::new_ws_client(int client_idx){
 
     auto &freed_client = websocket_clients[index];
 
-    const auto new_id = (freed_client.id + 1) % 100; //ID loops every 100
+    const auto new_id = (freed_client.id + 1) % 1000; //ID loops every 1000
     freed_client = ws_client();
     freed_client.id = new_id;
   }else{

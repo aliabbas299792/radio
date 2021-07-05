@@ -24,9 +24,6 @@ using uchar = unsigned char;
 using namespace web_cache;
 
 namespace web_server{
-  template<server_type T>
-  struct server_data;
-
   struct receiving_data_info{
     receiving_data_info(int length = -1, std::vector<char> buffer = {}) : length(length), buffer(buffer) {}
     int length = -1;
@@ -43,12 +40,14 @@ namespace web_server{
   };
 
   struct message_post_data {
-    message_post_data(message_type msg_type = message_type::websocket_broadcast, const char *buff_ptr = nullptr, size_t length = 0, int item_idx = 0, uint64_t additional_info = 0) : msg_type(msg_type), buff_ptr(buff_ptr), length(length), item_idx(item_idx), additional_info(additional_info) {}
+    message_post_data(message_type msg_type = message_type::websocket_broadcast, const char *buff_ptr = nullptr, size_t length = 0, int item_idx = 0, uint64_t additional_info = 0, std::string additional_str = "")
+       : msg_type(msg_type), buff_ptr(buff_ptr), length(length), item_idx(item_idx), additional_info(additional_info), additional_str(additional_str) {}
     message_type msg_type;
     const char *buff_ptr;
     uint64_t length;
     int item_idx;
     uint64_t additional_info;
+    std::string additional_str;
   };
 
   struct broadcast_data_items {
@@ -113,7 +112,8 @@ namespace web_server{
     std::vector<tcp_client> tcp_clients{}; //storing additional data related to the client_idxs passed to this layer
 
     //thread stuff
-    int central_communication_eventfd = eventfd(0, 0);
+    int memory_release_fd = eventfd(0, 0);
+    int new_radio_client_fd = eventfd(0, 0);
     
     std::vector<broadcast_data_items> broadcast_data{}; // data from any broadcasts sent from the program thread
 
@@ -123,10 +123,17 @@ namespace web_server{
       tcp_server->notify_event();
     }
 
-    void post_message_to_program(message_type msg_type, const char *buff_ptr, size_t length, int item_idx, uint64_t additional_info = -1){
+    void post_memory_release_message_to_program(message_type msg_type, const char *buff_ptr, size_t length, int item_idx, uint64_t additional_info = -1){
       if(!tcp_server) return; // need this stuff set before posting any messages
       to_program_queue.emplace(msg_type, buff_ptr, length, item_idx, additional_info);
-      eventfd_write(central_communication_eventfd, 1); //notify the program thread using our eventfd
+      eventfd_write(memory_release_fd, 1); //notify the program thread using our eventfd
+    }
+
+    void post_new_radio_client_to_program(std::string station, int ws_client_idx, int ws_client_id){
+      if(!tcp_server) return; // need this stuff set before posting any messages
+      to_program_queue.emplace(message_type::new_radio_client, nullptr, 0, ws_client_idx, ws_client_id, station); // ws_client_idx is item_idx, and additional_str is used for station
+      // we aren't using the buff_ptr and buff_size obviously, so just pass as nullptr and 0
+      eventfd_write(new_radio_client_fd, 1); //notify the program thread using our eventfd
     }
     
     message_post_data get_from_to_program_queue(){ // so called from main program thread
@@ -176,6 +183,12 @@ namespace web_server{
   #include "../../web_server/websockets.tcc"
 }
 
+template<server_type T>
+struct server_data;
+
+class audio_server;
+
+// AUDIO_SERVER_COMMUNICATION is a helper enum to distinguish the events from that class, for any other classes, just add a similar enum
 enum class central_web_server_event { TIMERFD, READ, WRITE, SERVER_THREAD_COMMUNICATION, AUDIO_SERVER_COMMUNICATION , KILL_SERVER };
 
 struct central_web_server_req {
@@ -208,7 +221,9 @@ private:
   void run();
 
   template<server_type T>
-  void run(int num_threads);
+  void run();
+
+  int num_threads = 0;
 
   int event_fd = eventfd(0, 0);
   int kill_server_efd = eventfd(0, 0);
@@ -217,17 +232,22 @@ private:
 
   data_store_namespace::data_store store{}; // the data store
 
-  void add_event_read_req(int eventfd, central_web_server_event event, uint64_t custom_info = 0); // adds io_uring read request for the eventfd
   void add_timer_read_req(int timerfd); // adds io_uring read request for the timerfd
-  void add_read_req(int fd, size_t size, int custom_info = 0); // adds normal read request on io_uring
+  void add_read_req(int fd, size_t size, int custom_info = -1); // adds normal read request on io_uring
   void add_write_req(int fd, const char *buff_ptr, size_t size); // adds normal write request on io_uring
 
   // to finish off the requests
   void read_req_continued(central_web_server_req *req, size_t last_read);
   void write_req_continued(central_web_server_req *req, size_t written);
 
+  // helper functions to deal with the audio servers
+  template<server_type T>
+  void audio_server_event_req_handler(int eventfd, int server_id, std::vector<server_data<T>> &thread_data_container);
+  void audio_server_read_req_handler(int readfd, int server_id, std::vector<char> &&buff);
+  void audio_server_initialise_reads(audio_server &server);
 public:
   void start_server(const char *config_file_path);
+  void add_event_read_req(int eventfd, central_web_server_event event, uint64_t custom_info = -1); // adds io_uring read request for the eventfd
 
   central_web_server(central_web_server const&) = delete;
   void operator=(central_web_server const&) = delete;
@@ -248,6 +268,9 @@ struct server_data {
     thread = std::thread(central_web_server::thread_server_runner<T>, std::ref(server));
   }
   server_data(server_data &&data) = default;
+  ~server_data() {
+    thread.join();
+  }
 };
 
 #endif

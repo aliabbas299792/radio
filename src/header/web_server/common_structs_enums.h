@@ -23,7 +23,8 @@ namespace web_server {
 
   enum class message_type {
     websocket_broadcast,
-    broadcast_finished
+    broadcast_finished,
+    new_radio_client
   };
 
   struct tcp_client {

@@ -38,6 +38,14 @@ struct audio_data {
 
 enum class audio_events { AUDIO_BROADCAST_EVT, FILE_REQUEST, INOTIFY_DIR_CHANGED, AUDIO_LIST, AUDIO_LIST_UPDATE, FILE_READY, AUDIO_REQUEST_FROM_PROGRAM, BROADCAST_TIMER, KILL };
 
+static struct {
+  std::array<float, 4> silkOnly{10, 20, 40, 60};
+  std::array<float, 2> hybrid{10, 20};
+  std::array<float, 4> celtOnly{2.5, 5, 10, 20};
+} audio_frame_durations;
+
+constexpr int AUDIO_CHUNK_LENGTH_MS = 5000;
+
 struct audio_req {
   audio_events event{};
   std::vector<char> buff{};
@@ -57,12 +65,37 @@ struct file_transfer_data {
   file_transfer_data(const std::string filepath = "", std::vector<char> &&buff = {}) : filepath(filepath), data(std::move(buff)) {}
 };
 
+struct audio_page_data {
+  std::vector<char> buff{};
+  size_t duration{};
+  audio_page_data(std::vector<char> &&buff, size_t duration) : duration(duration), buff(std::move(buff)) {}
+};
+
+struct audio_byte_length_duration {
+  size_t duration{};
+  size_t byte_length{};
+  audio_byte_length_duration(size_t duration = 0, size_t byte_length = 0) : duration(duration), byte_length(byte_length) {}
+};
+
+struct audio_chunk {
+  int duration{};
+  std::vector<audio_page_data> pages{};
+  bool insert_data(audio_page_data &&page){
+    if(duration < AUDIO_CHUNK_LENGTH_MS){ // less than 5s
+      pages.push_back(page);
+      duration += page.duration;
+      return true;
+    }
+    return false;
+  }
+};
+
 class audio_server {
   std::vector<std::string> audio_file_paths{};
   std::vector<std::string> audio_list{};
   std::string slash_separated_audio_list{}; // file names are in quotes
   std::set<int> last_10_items{};
-  std::deque<audio_data> chunks_of_audio{};
+  std::deque<audio_chunk> chunks_of_audio{};
 
   //
   ////communication between threads////
@@ -72,6 +105,7 @@ class audio_server {
   moodycamel::ReaderWriterQueue<audio_file_list_data> audio_file_list_data_queue{};
   moodycamel::ReaderWriterQueue<file_transfer_data> file_transfer_queue{};
   moodycamel::ReaderWriterQueue<std::string> audio_request_queue{};
+  moodycamel::ReaderWriterQueue<std::string> broadcast_queue{};
 
   std::string audio_server_name{};
   std::string dir_path = "";
@@ -81,20 +115,35 @@ class audio_server {
   
   std::string currently_processing_audio{}; // the name of the current file being processed - it is blank after processing
 
-  std::chrono::system_clock::time_point current_audio_start_time{};
   std::chrono::system_clock::time_point current_audio_finish_time{};
   std::chrono::system_clock::time_point last_broadcast_time{};
+  std::chrono::system_clock::time_point current_playback_time{};
 
   static std::vector<audio_server*> audio_servers;
 
   void fd_read_req(int fd, audio_events event, size_t size = sizeof(uint64_t));
 
   io_uring ring;
+
+  int get_config_num(int num); // gets the config number from the number provided
+  int get_frame_duration_ms(int config); // uses data in the first byte of each segment in a page to get the duration
+  audio_byte_length_duration get_ogg_page_info(char *buff); // gets the ogg page length and duration
+  std::vector<audio_page_data> get_audio_page_data(std::vector<char> &&buff); // returns a vector of pointers for the pages along with their durations
+
+  static int max_id;
+
+  std::thread audio_thread{};
+  void run(); // run the audio server
+  void wait_for_clean_exit();
 public:
   audio_server(std::string dir_path, std::string audio_server_name);
-  void run(); // run the audio server
+  int id = -1;
 
-  static void kill_all_servers();
+  static std::unordered_map<std::string, int> server_id_map;
+  static audio_server *instance(int id){ return audio_servers[id]; }
+  static void audio_server_req_handler(int server_id, int event_fd);
+  static std::vector<std::string> audio_server_names; // the names of the audio server are stored here
+
   void kill_server();
   int kill_efd = eventfd(0, 0);
 
@@ -107,6 +156,7 @@ public:
   void post_audio_list_update(const bool addition, const std::string &file_name);
   void request_audio_list();
   audio_file_list_data get_from_audio_file_list_data_queue();
+  const int file_ready_fd = eventfd(0, 0);
   
   // relating to the actual broadcast
   const int timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
@@ -116,19 +166,24 @@ public:
   void send_file_back_to_audio_server(const std::string &path, std::vector<char> &&buff);
   void send_audio_request_to_audio_server(const std::string &file_name);
   std::string get_requested_audio();
-
-  // audio_evt_req get_from_to_audio_server_queue(); // so used in the audio server
-  // audio_evt_req get_from_to_program_queue(); // so used in the main central web server
-  void broadcast_audio_to_program(audio_data &&data);
-
-
-
+  
+  std::string get_broadcast_audio();
+  void broadcast_to_central_server(std::string &&data);
   const int broadcast_fd = eventfd(0, 0);
-  const int file_ready_fd = eventfd(0, 0);
-  const int audio_from_program_request_fd = eventfd(0, 0);
 
-  const int send_audio_file = eventfd(0, 0); // notify thread that we want a file
-  const int notify_audio_server_file_ready = eventfd(0, 0);
+  // these are updated via the event loop on the main thread, rather than directly since could cause a data race
+  struct {
+    std::unordered_set<std::string> file_set{};
+    std::string slash_separated_audio_list{};
+    
+    std::unordered_map<int, std::string> fd_to_filepath{};
+    std::vector<char> last_broadcast_data{};
+  } main_thread_state;
+
+  ~audio_server(){ // this will be called as soon as it goes out of scope, unlike the web
+    kill_server();
+    wait_for_clean_exit();
+  }
 };
 
 #endif

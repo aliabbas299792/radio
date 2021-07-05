@@ -97,14 +97,15 @@ void central_web_server::start_server(const char *config_file_path){
 
   //done reading config
   const auto num_threads = config_data_map.count("SERVER_THREADS") ? std::stoi(config_data_map["SERVER_THREADS"]) : 3; //by default uses 3 threads
+  this->num_threads = num_threads;
 
   std::cout << "Running server\n";
 
   if(config_data_map["TLS"] == "yes"){
     std::cout << "TLS will be used\n";
-    run<server_type::TLS>(num_threads);
+    run<server_type::TLS>();
   }else{
-    run<server_type::NON_TLS>(num_threads);
+    run<server_type::NON_TLS>();
   }
 }
 
@@ -180,9 +181,8 @@ void central_web_server::write_req_continued(central_web_server_req *req, size_t
 }
 
 template<server_type T>
-void central_web_server::run(int num_threads){
+void central_web_server::run(){
   std::cout << "Using " << num_threads << " threads\n";
-
 
   // io_uring stuff
   std::memset(&ring, 0, sizeof(io_uring));
@@ -195,13 +195,20 @@ void central_web_server::run(int num_threads){
   bool run_server = true;
 
 
+  // audio server, automatically registers with the eventfds
+  audio_server test_audio_server("public/assets/audio/", "Test Server");
+  audio_server_initialise_reads(test_audio_server);
+
+
   // server threads
   std::vector<server_data<T>> thread_data_container{};
   thread_data_container.resize(num_threads);
   int idx = 0;
   for(auto &thread_data : thread_data_container){
     // custom info is the idx of the server in the vector
-    add_event_read_req(thread_data.server.central_communication_eventfd, central_web_server_event::SERVER_THREAD_COMMUNICATION, idx++); // add read for all thread events
+    add_event_read_req(thread_data.server.memory_release_fd, central_web_server_event::SERVER_THREAD_COMMUNICATION, idx); // add read for all thread events
+    add_event_read_req(thread_data.server.new_radio_client_fd, central_web_server_event::SERVER_THREAD_COMMUNICATION, idx); // add read for all thread events
+    idx++;
   }
 
 
@@ -210,29 +217,6 @@ void central_web_server::run(int num_threads){
   utility::set_timerfd_interval(timer_fd, 5000); // 5s timer that (fires first event immediately)
   add_timer_read_req(timer_fd); // arm the timer
 
-
-  // audio server stuff
-  auto test_audio_server = audio_server("public/assets/audio/", "Test Server");
-  std::thread audio_thread([&test_audio_server] {
-    test_audio_server.run(); // run the audio server in another thread
-  });
-  // read on the various eventfds
-  add_event_read_req(test_audio_server.notify_audio_list_available, central_web_server_event::AUDIO_SERVER_COMMUNICATION);
-  add_event_read_req(test_audio_server.audio_list_update, central_web_server_event::AUDIO_SERVER_COMMUNICATION);
-  add_event_read_req(test_audio_server.file_request_fd, central_web_server_event::AUDIO_SERVER_COMMUNICATION);
-
-  test_audio_server.request_audio_list(); // put in a request for the audio list
-
-  struct {
-    std::unordered_set<std::string> file_set{};
-    std::string slash_separated_audio_list{};
-    
-    std::unordered_map<int, std::string> fd_to_filepath{};
-  } audio_data;
-
-
-  // shortcut for make_ws_frame
-  const auto make_ws_frame = web_server::basic_web_server<T>::make_ws_frame;
 
   while(run_server){
     char ret = io_uring_wait_cqe(&ring, &cqe);
@@ -261,32 +245,29 @@ void central_web_server::run(int num_threads){
         break;
       }
       case central_web_server_event::TIMERFD: {
-        auto ws_data = make_ws_frame("haha", web_server::websocket_non_control_opcodes::text_frame);
-
-        auto item_data = store.insert_item(std::move(ws_data), num_threads);
-
-        for(auto &thread_data : thread_data_container)
-          thread_data.server.post_message_to_server_thread(web_server::message_type::websocket_broadcast, reinterpret_cast<const char*>(item_data.buffer.ptr), item_data.buffer.size, item_data.idx);
-
         add_timer_read_req(timer_fd); // rearm the timer
         break;
       }
       case central_web_server_event::SERVER_THREAD_COMMUNICATION: {
-        if(req->custom_info != -1){ // then the idx is set as custom_info
+        if(req->custom_info != -1){ // then the idx is set as custom_info in the add_event_read_req call above
           auto data = thread_data_container[req->custom_info].server.get_from_to_program_queue();
-          store.free_item(data.item_idx);
-
-          add_event_read_req(req->fd, central_web_server_event::SERVER_THREAD_COMMUNICATION, req->custom_info); // rearm the eventfd
+          switch(data.msg_type){
+            case web_server::message_type::broadcast_finished:
+              store.free_item(data.item_idx);
+              break;
+            case web_server::message_type::new_radio_client:
+              if(audio_server::server_id_map.count(data.additional_str)){ // the radio server name is sent in data.additional_str
+                // send the latest cached data for this specific server to this user, data.item_idx is the ws_client_idx and data.additional_info is the ws_client_id
+              }
+              break;
+          }
         }
+        add_event_read_req(req->fd, central_web_server_event::SERVER_THREAD_COMMUNICATION, req->custom_info); // rearm the eventfd
         break;
       }
       case central_web_server_event::READ:
         if(req->buff.size() == cqe->res + req->progress_bytes){
-          // the entire thing has been read, add it to some local cache or something
-          if(audio_data.fd_to_filepath.count(req->fd)){ // send the file to the requester
-            test_audio_server.send_file_back_to_audio_server(audio_data.fd_to_filepath[req->fd], std::move(req->buff));
-            audio_data.fd_to_filepath.erase(req->fd);
-          }
+          audio_server_read_req_handler(req->fd, req->custom_info, std::move(req->buff)); // the audio server ID is stored in req->custom_info
         }else{
           read_req_continued(req, cqe->res);
           req = nullptr;
@@ -299,39 +280,10 @@ void central_web_server::run(int num_threads){
           // we're finished writing otherwise
         }
         break;
-      case central_web_server_event::AUDIO_SERVER_COMMUNICATION:
-        if(req->fd == test_audio_server.notify_audio_list_available){ // the initial data
-          auto data = test_audio_server.get_from_audio_file_list_data_queue();
-
-          for(const auto &file : data.file_list)
-            audio_data.file_set.insert(file);
-
-          audio_data.slash_separated_audio_list = data.appropriate_str;
-
-          add_event_read_req(test_audio_server.notify_audio_list_available, central_web_server_event::AUDIO_SERVER_COMMUNICATION);
-        }else if(req->fd == test_audio_server.audio_list_update){ // updates the initial data
-          auto data = test_audio_server.get_from_audio_file_list_data_queue();
-
-          if(data.addition){
-            audio_data.slash_separated_audio_list += "/"+data.appropriate_str;
-            audio_data.file_set.insert(data.appropriate_str);
-          }else{
-            audio_data.slash_separated_audio_list = utility::remove_from_slash_string(audio_data.slash_separated_audio_list, data.appropriate_str);
-            audio_data.file_set.erase(data.appropriate_str);
-          }
-
-          add_event_read_req(test_audio_server.audio_list_update, central_web_server_event::AUDIO_SERVER_COMMUNICATION);
-        }else if(req->fd == test_audio_server.file_request_fd){
-          auto data = test_audio_server.get_from_file_transfer_queue();
-
-          int fd = open(data.filepath.c_str(), O_RDONLY);
-          size_t size = utility::get_file_size(fd);
-          audio_data.fd_to_filepath[fd] = data.filepath;
-          add_read_req(fd, size); // add a read request for this file
-
-          add_event_read_req(test_audio_server.file_request_fd, central_web_server_event::AUDIO_SERVER_COMMUNICATION);
-        }
+      case central_web_server_event::AUDIO_SERVER_COMMUNICATION: {
+        audio_server_event_req_handler<T>(req->fd, req->custom_info, thread_data_container); // the audio server ID is stored in req->custom_info
         break;
+      }
     }
 
     delete req;
@@ -339,13 +291,74 @@ void central_web_server::run(int num_threads){
     io_uring_cqe_seen(&ring, cqe); //mark this CQE as seen
   }
   
+  // make sure to close sockets
   close(timer_fd);
+}
 
-  // wait for all threads to exit before exiting the program
-  for(auto &thread_data : thread_data_container)
-    thread_data.thread.join();
-  
-  audio_thread.join();
+void central_web_server::audio_server_initialise_reads(audio_server &server){
+  // read on the various eventfds, supplying the IDs as well
+  add_event_read_req(server.notify_audio_list_available, central_web_server_event::AUDIO_SERVER_COMMUNICATION, server.id);
+  add_event_read_req(server.audio_list_update, central_web_server_event::AUDIO_SERVER_COMMUNICATION, server.id);
+  add_event_read_req(server.file_request_fd, central_web_server_event::AUDIO_SERVER_COMMUNICATION, server.id);
+  add_event_read_req(server.broadcast_fd, central_web_server_event::AUDIO_SERVER_COMMUNICATION, server.id);
+  server.request_audio_list(); // put in a request for the audio list
+}
+
+void central_web_server::audio_server_read_req_handler(int readfd, int server_id, std::vector<char> &&buff){
+  // the audio server
+  auto server = audio_server::instance(server_id);
+
+  if(server->main_thread_state.fd_to_filepath.count(readfd)){ // send the file to the requester
+    server->send_file_back_to_audio_server(server->main_thread_state.fd_to_filepath[readfd], std::move(buff));
+    server->main_thread_state.fd_to_filepath.erase(readfd);
+  }
+}
+
+template<server_type T>
+void central_web_server::audio_server_event_req_handler(int eventfd, int server_id, std::vector<server_data<T>> &thread_data_container){
+  // shortcut for make_ws_frame
+  const auto make_ws_frame = web_server::basic_web_server<T>::make_ws_frame;
+  // the audio server
+  auto server = audio_server::instance(server_id);
+
+  if(eventfd == server->notify_audio_list_available){ // the initial data
+    auto data = server->get_from_audio_file_list_data_queue();
+
+    for(const auto &file : data.file_list)
+      server->main_thread_state.file_set.insert(file);
+
+    server->main_thread_state.slash_separated_audio_list = data.appropriate_str;
+  }else if(eventfd == server->audio_list_update){ // updates the initial data
+    auto data = server->get_from_audio_file_list_data_queue();
+
+    if(data.addition){
+      server->main_thread_state.slash_separated_audio_list += "/"+data.appropriate_str;
+      server->main_thread_state.file_set.insert(data.appropriate_str);
+    }else{
+      server->main_thread_state.slash_separated_audio_list = utility::remove_from_slash_string(server->main_thread_state.slash_separated_audio_list, data.appropriate_str);
+      server->main_thread_state.file_set.erase(data.appropriate_str);
+    }
+  }else if(eventfd == server->file_request_fd){
+    auto data = server->get_from_file_transfer_queue();
+
+    int fd = open(data.filepath.c_str(), O_RDONLY);
+    size_t size = utility::get_file_size(fd);
+    server->main_thread_state.fd_to_filepath[fd] = data.filepath;
+    add_read_req(fd, size, server_id); // add a read request for this file, setting the server_id correctly - need it to locate the server
+  }else if(eventfd == server->broadcast_fd){
+    auto data = server->get_broadcast_audio();
+
+    auto ws_data = make_ws_frame(data, web_server::websocket_non_control_opcodes::text_frame);
+    server->main_thread_state.last_broadcast_data = ws_data;
+
+    std::cout << ws_data.size() << " is send data size\n";
+
+    auto item_data = store.insert_item(std::move(ws_data), num_threads);
+
+    for(auto &thread_data : thread_data_container)
+      thread_data.server.post_message_to_server_thread(web_server::message_type::websocket_broadcast, reinterpret_cast<const char*>(item_data.buffer.ptr), item_data.buffer.size, item_data.idx);
+  }
+  add_event_read_req(eventfd, central_web_server_event::AUDIO_SERVER_COMMUNICATION, server_id);
 }
 
 void central_web_server::kill_server(){

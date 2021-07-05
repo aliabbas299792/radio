@@ -1,8 +1,8 @@
 const button = document.getElementById('button');
 const selector = document.getElementById('selector');
-let context = undefined;
+let context = new AudioContext();
 let currentTime = 0;
-let arrayBufferPrevious = undefined;
+let typedArrayPrevious = new Uint8Array();
 
 function playPCM(arrayBuffer){ //plays interleaved linear PCM with 16 bit, bit depth
   const int32array = new Int32Array(arrayBuffer);
@@ -56,95 +56,51 @@ function playPCM(arrayBuffer){ //plays interleaved linear PCM with 16 bit, bit d
   source.start(currentTime);
   currentTime += Math.round(buffer.duration*100)/100; //2dp
 
-
   source.connect(context.destination);
 }
 
-async function getFile(path){ //gets some file via fetch api
-  const resp = await fetch(`/assets/audioSamples/${path}`);
-  const blob = await resp.blob();
-  const arrayBuffer = await blob.arrayBuffer();
-  const uint8array = new Uint8Array(arrayBuffer);
-  return uint8array;
-}
+async function playMusic(typedArrayCurrent){ //takes 1 packet of audio, decode, and then plays it
+  let allocatedCurrentBufferPtr = 0, allocatedPreviousBufferPtr = 0;
+  let decodedCurrentBufferPtr;
 
-async function playMusic(arrayOfArrayBuffers){ //takes 1 packet of audio, decode, and then plays it
-  for(const arrayBuffer of arrayOfArrayBuffers){
-    let allocatedCurrentBufferPtr = 0, allocatedPreviousBufferPtr = 0;
-    let decodedCurrentBufferPtr;
+  try {
+    allocatedCurrentBufferPtr = Module._malloc(typedArrayCurrent.length * typedArrayCurrent.BYTES_PER_ELEMENT);
+    Module.HEAPU8.set(typedArrayCurrent, allocatedCurrentBufferPtr);
 
-    try {
-      const typedArrayCurrent = new Uint8Array(arrayBuffer);
-      const typedArrayPrevious = new Uint8Array(arrayBufferPrevious);
-      
-      allocatedCurrentBufferPtr = Module._malloc(typedArrayCurrent.length * typedArrayCurrent.BYTES_PER_ELEMENT);
-      Module.HEAPU8.set(typedArrayCurrent, allocatedCurrentBufferPtr);
-
-      if(arrayBufferPrevious){
-        allocatedPreviousBufferPtr = Module._malloc(typedArrayPrevious.length * typedArrayPrevious.BYTES_PER_ELEMENT);
-        Module.HEAPU8.set(typedArrayPrevious, allocatedPreviousBufferPtr);
-      }
-
-      const lengthOfOutput = Module.ccall( //will retrieve the total length in bytes required to store the decoded output
-        'lengthOfOutput', 
-        "number",
-        ["number", "number"],
-        [allocatedCurrentBufferPtr, typedArrayCurrent.length]
-      );
-
-      decodedCurrentBufferPtr = Module._malloc(lengthOfOutput);
-
-      const typedArrayCurrentLength = arrayBuffer ? typedArrayCurrent.length : 0;
-      const typedArrayPreviousLength = arrayBufferPrevious ? typedArrayPrevious.length : 0;
-
-      Module.ccall(
-        'decodeOggPage',
-        "number",
-        ["number", "number", "number", "number", "number"],
-        [allocatedCurrentBufferPtr, typedArrayCurrentLength, allocatedPreviousBufferPtr, typedArrayPreviousLength, decodedCurrentBufferPtr]
-      );
-
-      const outputArrayBuffer = Module.HEAP8.slice(decodedCurrentBufferPtr, decodedCurrentBufferPtr + lengthOfOutput).buffer;
-
-      playPCM(outputArrayBuffer); //output array buffer contains decoded audio
-    } catch(err) {
-      console.log("Error: " + err);
-    } finally {
-      Module._free(allocatedPreviousBufferPtr);
-      Module._free(allocatedCurrentBufferPtr);
-      Module._free(allocatedPreviousBufferPtr);
-
-      arrayBufferPrevious = arrayBuffer;
+    if(typedArrayPrevious){
+      allocatedPreviousBufferPtr = Module._malloc(typedArrayPrevious.length * typedArrayPrevious.BYTES_PER_ELEMENT);
+      Module.HEAPU8.set(typedArrayPrevious, allocatedPreviousBufferPtr);
     }
-  }
-}
 
-const data = {
-  sinetest: 30,
-  stereoInstruments: 22
-};
+    const lengthOfOutput = Module.ccall( //will retrieve the total length in bytes required to store the decoded output
+      'lengthOfOutput', 
+      "number",
+      ["number", "number"],
+      [allocatedCurrentBufferPtr, typedArrayCurrent.length]
+    );
 
-async function playOpus(stop){ //plays some number of audio packets from a subdirectory - playMusic is used directly
-  if(!context && !stop){ //if the stop flag is set, then only stop
-    button.innerText = "Stop Music";
-    context = new window.AudioContext();
-    currentTime = 0;
-    const arrayOfArrayBuffers = [];
-    
-    const track = selector.value;
-    const packetAmount = data[track];
+    decodedCurrentBufferPtr = Module._malloc(lengthOfOutput);
 
-    for(let i = 0; i <= packetAmount; i++){
-      arrayOfArrayBuffers.push((await getFile(`${track}/${i}.packet`)).buffer);
-    }
-    playMusic(arrayOfArrayBuffers);
+    const typedArrayCurrentLength = typedArrayCurrent ? typedArrayCurrent.length : 0;
+    const typedArrayPreviousLength = typedArrayPrevious ? typedArrayPrevious.length : 0;
 
-    setTimeout(() => {
-      playOpus(true); //this causes it to stop the music after approximately the entire track has been played
-    }, packetAmount*1000);
-  }else{
-    button.innerText = "Play Music";
-    await context.close();
-    context = undefined;
+    Module.ccall(
+      'decodeOggPage',
+      "number",
+      ["number", "number", "number", "number", "number"],
+      [allocatedCurrentBufferPtr, typedArrayCurrentLength, allocatedPreviousBufferPtr, typedArrayPreviousLength, decodedCurrentBufferPtr]
+    );
+
+    const outputArrayBuffer = Module.HEAP8.slice(decodedCurrentBufferPtr, decodedCurrentBufferPtr + lengthOfOutput).buffer;
+
+    playPCM(outputArrayBuffer); //output array buffer contains decoded audio
+  } catch(err) {
+    console.log("Error: " + err);
+  } finally {
+    Module._free(allocatedPreviousBufferPtr);
+    Module._free(allocatedCurrentBufferPtr);
+    Module._free(allocatedPreviousBufferPtr);
+
+    typedArrayPrevious = typedArrayCurrent;
   }
 }

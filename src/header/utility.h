@@ -29,6 +29,8 @@ namespace utility {
   
   uint64_t random_number(uint64_t min, uint64_t max);
 
+  std::string to_web_name(std::string name); // simple function to make the input lower case, and replace spaces with underscores
+
   //removes first n elements from a vector
   template <typename T>
   void remove_first_n_elements(std::vector<T> &data, int num_elements_to_remove){ //deals correctly with overlaps

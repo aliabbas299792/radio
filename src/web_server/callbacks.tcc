@@ -21,7 +21,7 @@ void close_cb(int client_idx, int broadcast_additional_info, tcp_tls_server::ser
     auto &item = web_server->broadcast_data[broadcast_additional_info];
     auto &uses = item.uses;
     if(--uses == 0)
-      web_server->post_message_to_program(web_server::message_type::broadcast_finished, item.buff_ptr, item.data_len, broadcast_additional_info);
+      web_server->post_memory_release_message_to_program(web_server::message_type::broadcast_finished, item.buff_ptr, item.data_len, broadcast_additional_info);
   }
 
   web_server->kill_client(client_idx);
@@ -45,7 +45,7 @@ void event_cb(tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the ac
 
     tcp_server->broadcast_message(client_idxs.cbegin(), client_idxs.cend(), client_idxs.size(), data.buff_ptr, data.length, data.item_idx);
   }else{
-    web_server->post_message_to_program(web_server::message_type::broadcast_finished, data.buff_ptr, data.length, data.item_idx);
+    web_server->post_memory_release_message_to_program(web_server::message_type::broadcast_finished, data.buff_ptr, data.length, data.item_idx);
   }
 }
 
@@ -96,8 +96,11 @@ void read_cb(int client_idx, char *buffer, unsigned int length, tcp_tls_server::
       headers.push_back(tempStr);
     }
 
-    bool is_GET = !strcmp(strtok_r((char*)headers[0].c_str(), " ", &saveptr), "GET");
+    char *temp_str = strdup(headers[0].c_str());
+    bool is_GET = !strcmp(strtok_r(temp_str, " ", &saveptr), "GET");
     std::string path = &strtok_r(nullptr, " ", &saveptr)[1]; //if it's a valid request it should be a path
+    free(temp_str);
+
 
     //get callback, if unsuccesful then 404
     if( !is_GET ||
@@ -124,7 +127,7 @@ void write_cb(int client_idx, int broadcast_additional_info, tcp_tls_server::ser
     auto &item = web_server->broadcast_data[broadcast_additional_info];
     auto &uses = item.uses;
     if(--uses == 0)
-      web_server->post_message_to_program(web_server::message_type::broadcast_finished, item.buff_ptr, item.data_len, broadcast_additional_info);
+      web_server->post_memory_release_message_to_program(web_server::message_type::broadcast_finished, item.buff_ptr, item.data_len, broadcast_additional_info);
   }
 
   if(!web_server->websocket_process_write_cb(client_idx)) //if this is a websocket that is in the process of closing, it will let it close and then exit the function, otherwise we read from the function

@@ -250,15 +250,26 @@ void central_web_server::run(){
       }
       case central_web_server_event::SERVER_THREAD_COMMUNICATION: {
         if(req->custom_info != -1){ // then the idx is set as custom_info in the add_event_read_req call above
-          auto data = thread_data_container[req->custom_info].server.get_from_to_program_queue();
+          auto &server = thread_data_container[req->custom_info].server;
+          auto data = server.get_from_to_program_queue();
           switch(data.msg_type){
             case web_server::message_type::broadcast_finished:
               store.free_item(data.item_idx);
               break;
             case web_server::message_type::new_radio_client:
+              std::vector<char> response_data{};
               if(audio_server::server_id_map.count(data.additional_str)){ // the radio server name is sent in data.additional_str
                 // send the latest cached data for this specific server to this user, data.item_idx is the ws_client_idx and data.additional_info is the ws_client_id
+                std::cout << "test\n";
+                auto server_id = audio_server::server_id_map[data.additional_str];
+                audio_server *inst = audio_server::instance(server_id);
+                response_data = inst->main_thread_state.last_broadcast_data;
+                std::cout << "test 2\n";
+              }else{
+                response_data.push_back(-1); // the only element will be a -1, which indicates the server wasn't found, and so disconnect the client
               }
+              server.post_new_radio_client_response_to_server(data.item_idx, data.additional_info, std::move(response_data));
+              std::cout << "test 3\n";
               break;
           }
         }

@@ -66,7 +66,7 @@ void server<server_type::NON_TLS>::close_connection(int client_idx) {
 
     close(client.sockfd);
 
-    freed_indexes.insert(client_idx);
+    freed_indexes.insert(freed_indexes.end(), client_idx);
   }
 }
 

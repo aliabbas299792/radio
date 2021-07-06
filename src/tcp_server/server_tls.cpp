@@ -27,7 +27,7 @@ void server<server_type::TLS>::close_connection(int client_idx) {
     active_connections.erase(client_idx);
     client.send_data = {}; //free up all the data we might have wanted to send
 
-    freed_indexes.insert(client_idx);
+    freed_indexes.insert(freed_indexes.end(), client_idx);
   }
 }
 

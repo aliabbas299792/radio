@@ -21,7 +21,7 @@ namespace data_store_namespace {
       if(--item.second == 0){
         free(data_vec[idx].first);
         data_vec[idx] = { nullptr, -1 };
-        free_idxs.insert(idx);
+        free_idxs.insert(free_idxs.end(), idx);
       }
     }
 
@@ -80,7 +80,7 @@ namespace data_store_namespace {
       auto &item = data_vec[idx];
       if(--item.second == 0){
         data_vec[idx] = { {}, -1 };
-        free_idxs.insert(idx);
+        free_idxs.insert(free_idxs.end(), idx);
       }
     }
 

@@ -44,7 +44,7 @@ static struct {
   std::array<float, 4> celtOnly{2.5, 5, 10, 20};
 } audio_frame_durations;
 
-constexpr int AUDIO_CHUNK_LENGTH_MS = 5000;
+constexpr int BROADCAST_INTERVAL_MS = 5000;
 
 struct audio_req {
   audio_events event{};
@@ -81,7 +81,7 @@ struct audio_chunk {
   int duration{};
   std::vector<audio_page_data> pages{};
   bool insert_data(audio_page_data &&page){
-    if(duration < AUDIO_CHUNK_LENGTH_MS){ // less than 5s
+    if(duration < BROADCAST_INTERVAL_MS){ // less than BROADCAST_INTERVAL_MS
       pages.push_back(page);
       duration += page.duration;
       return true;

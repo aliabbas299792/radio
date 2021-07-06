@@ -132,10 +132,10 @@ int basic_web_server<T>::new_ws_client(int client_idx){
     freed_client = ws_client();
     freed_client.id = new_id;
   }else{
-    websocket_clients.emplace(websocket_clients.end()); //otherwise give a new one
+    websocket_clients.emplace_back(); //otherwise give a new one
     index = websocket_clients.size()-1;
   }
-  
+
   websocket_clients[index].client_idx = client_idx; // for the tcp layer sockets
 
   all_websocket_connections.insert(index); // stores ws_client_idx
@@ -227,8 +227,9 @@ bool basic_web_server<T>::close_ws_connection_potential_confirm(int ws_client_id
   auto &client_data = websocket_clients[ws_client_idx];
   if(client_data.currently_writing == 1){
     if(client_data.close){
+      std::cout << "we here huh...\n";
       close_connection(client_data.client_idx); // we erase from all_websocket_connections in this call (in kill_client)
-      freed_indexes.insert(ws_client_idx);
+      freed_indexes.insert(freed_indexes.end(), ws_client_idx);
     }
   }else{
     client_data.currently_writing--;

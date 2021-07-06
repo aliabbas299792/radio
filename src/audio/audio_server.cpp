@@ -75,7 +75,7 @@ void audio_server::run(){
   fd_read_req(file_ready_fd, audio_events::FILE_READY);
 
   // time stuff
-  utility::set_timerfd_interval(timerfd, 5000);
+  utility::set_timerfd_interval(timerfd, BROADCAST_INTERVAL_MS);
   fd_read_req(timerfd, audio_events::BROADCAST_TIMER);
   current_audio_finish_time = std::chrono::system_clock::now();
   last_broadcast_time = current_audio_finish_time;
@@ -167,8 +167,8 @@ std::string audio_server::get_broadcast_audio(){
 }
 
 void audio_server::broadcast_routine(){
-  if(currently_processing_audio == "" && std::chrono::system_clock::now() >= current_audio_finish_time - std::chrono::seconds(5)){
-    // if there are less than 5s till the end of this file, and nothing is currently being
+  if(currently_processing_audio == "" && std::chrono::system_clock::now() >= current_audio_finish_time - std::chrono::milliseconds(BROADCAST_INTERVAL_MS * 2)){ // *2 since we want to make sure a small chunk will have enough
+    // if there are less than BROADCAST_INTERVAL_MS long till the end of this file, and nothing is currently being
     currently_processing_audio = get_requested_audio();
     if(currently_processing_audio == ""){ // if there was nothing in the requested queue
       if(audio_list.size() < 10)
@@ -210,6 +210,7 @@ void audio_server::broadcast_routine(){
     data_chunk["duration"] = chunk.duration;
     data_chunk["pages"] = data_pages;
 
+    std::cout << "broacasting chunk of duration: " << chunk.duration << "\n";
     broadcast_to_central_server(data_chunk.dump());
   }
 }
@@ -293,7 +294,7 @@ void audio_server::process_audio(file_transfer_data &&data){
   // chunks_of_audio.pop_back() to get the most recently pushed chunk
   // chunks_of_audio.pop_front() to get the audio to broadcast
 
-  // firstly get the most recent chunk from chunks_of_audio.pop_back(), get its length and see if you can append some on to the end of it to get 5s chunk
+  // firstly get the most recent chunk from chunks_of_audio.pop_back(), get its length and see if you can append some on to the end of it to get a BROADCAST_INTERVAL_MS long chunk
   // then push that chunk, followed by the rest of the chunks
   auto audio_data = get_audio_page_data(std::move(data.data));
 
@@ -303,8 +304,9 @@ void audio_server::process_audio(file_transfer_data &&data){
   for(const auto& page : audio_data)
     duration_of_audio += page.duration;
 
-  if(chunks_of_audio.size() && chunks_of_audio.back().duration < AUDIO_CHUNK_LENGTH_MS){ // push to the most recent chunk if it's not full
+  if(chunks_of_audio.size() && chunks_of_audio.back().duration < BROADCAST_INTERVAL_MS){ // push to the most recent chunk if it's not full
     auto &old_chunk = chunks_of_audio.back();
+    std::cout << "OLD CHUNK TIME\n";
     while(old_chunk.insert_data(std::move(audio_data[audio_data_idx++]))){
       if(audio_data_idx == audio_data.size()) break; // don't wanna segfault by overstepping the boundaries
     }

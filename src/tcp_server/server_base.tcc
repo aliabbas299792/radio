@@ -35,10 +35,13 @@ void server_base<T>::start(){ //function to run the server
       {
         if(req->event == event_type::ACCEPT_WRITE || req->event == event_type::WRITE)
           req->buffer = nullptr; //done with the request buffer
+        std::cout << "res: " << cqe->res << "\n";
         if(cqe->res <= 0 && clients[req->client_idx].id == req->ID){ // only do these if the client hasn't been replaced
           auto &client = clients[req->client_idx];
           if(req->event == event_type::WRITE || req->event == event_type::ACCEPT_WRITE)
             client.num_write_reqs--; // a write operation failed, decrement the number of active write operaitons for this client
+
+          std::cout << "client is become death " << req->client_idx << "\n";
 
           if(client.num_write_reqs == 0){
             while(client.send_data.size()){

@@ -43,7 +43,7 @@ namespace web_cache {
 
     cache(){ //only works for cache's which are greater than 1 in size
       for(int i = 0; i < cache_buffer.size(); i++)
-        free_idxs.insert(i);
+        free_idxs.insert(free_idxs.end(), i);
     }
 
     cache_fetch_item fetch_item(const std::string &filepath, int client_idx, web_server::tcp_client &client){
@@ -67,7 +67,7 @@ namespace web_cache {
             
             inotify_rm_watch(inotify_fd, item.watch); //remove the watcher for this item
             watch_to_cache_idx.erase(item.watch);
-            free_idxs.insert(current_idx);
+            free_idxs.insert(free_idxs.end(), current_idx);
             item = cache_item();
 
             return { false, nullptr };
@@ -90,7 +90,7 @@ namespace web_cache {
         if(outdated_file){
           inotify_rm_watch(inotify_fd, item.watch); //remove the watcher for this item
           watch_to_cache_idx.erase(item.watch);
-          free_idxs.insert(current_idx);
+          free_idxs.insert(free_idxs.end(), current_idx);
           item = cache_item();
 
           return { false, nullptr };

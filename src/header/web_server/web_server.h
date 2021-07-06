@@ -40,21 +40,24 @@ namespace web_server{
   };
 
   struct message_post_data {
-    message_post_data(message_type msg_type = message_type::websocket_broadcast, const char *buff_ptr = nullptr, size_t length = 0, int item_idx = 0, uint64_t additional_info = 0, std::string additional_str = "")
-       : msg_type(msg_type), buff_ptr(buff_ptr), length(length), item_idx(item_idx), additional_info(additional_info), additional_str(additional_str) {}
-    message_type msg_type;
-    const char *buff_ptr;
-    uint64_t length;
-    int item_idx;
-    uint64_t additional_info;
-    std::string additional_str;
+    message_type msg_type{};
+    
+    const char *buff_ptr{};
+    int64_t length = -1;
+
+    std::vector<char> buff{};
+
+    int item_idx = -1;
+
+    int64_t additional_info = -1;
+    std::string additional_str{};
   };
 
   struct broadcast_data_items {
     const char* buff_ptr{};
     size_t data_len{};
     size_t uses{};
-    broadcast_data_items(const char* buff_ptr = nullptr, size_t data_len = -1, uint64_t uses = -1) : buff_ptr(buff_ptr), data_len(data_len), uses(uses) {}
+    broadcast_data_items(const char* buff_ptr = nullptr, int64_t data_len = -1, int64_t uses = -1) : buff_ptr(buff_ptr), data_len(data_len), uses(uses) {}
   };
 
   template<server_type T>
@@ -119,21 +122,48 @@ namespace web_server{
 
     void post_message_to_server_thread(message_type msg_type, const char *buff_ptr, size_t length, int item_idx, uint64_t additional_info = -1){ //called from the program thread, to notify the server thread
       if(!tcp_server) return; // need this set before posting any messages
-      to_server_queue.emplace(msg_type, buff_ptr, length, item_idx, additional_info);
+      message_post_data data;
+      data.msg_type = msg_type;
+      data.buff_ptr = buff_ptr;
+      data.length = length;
+      data.item_idx = item_idx;
+      data.additional_info = additional_info;
+      to_server_queue.enqueue(std::move(data));
       tcp_server->notify_event();
     }
 
     void post_memory_release_message_to_program(message_type msg_type, const char *buff_ptr, size_t length, int item_idx, uint64_t additional_info = -1){
       if(!tcp_server) return; // need this stuff set before posting any messages
-      to_program_queue.emplace(msg_type, buff_ptr, length, item_idx, additional_info);
+      message_post_data data;
+      data.msg_type = msg_type;
+      data.buff_ptr = buff_ptr;
+      data.length = length;
+      data.item_idx = item_idx;
+      data.additional_info = additional_info;
+      to_program_queue.enqueue(std::move(data));
       eventfd_write(memory_release_fd, 1); //notify the program thread using our eventfd
     }
 
     void post_new_radio_client_to_program(std::string station, int ws_client_idx, int ws_client_id){
       if(!tcp_server) return; // need this stuff set before posting any messages
-      to_program_queue.emplace(message_type::new_radio_client, nullptr, 0, ws_client_idx, ws_client_id, station); // ws_client_idx is item_idx, and additional_str is used for station
-      // we aren't using the buff_ptr and buff_size obviously, so just pass as nullptr and 0
+      message_post_data data;
+      data.msg_type = message_type::new_radio_client;
+      data.item_idx = ws_client_idx;
+      data.additional_info = ws_client_id;
+      data.additional_str = station;
+      to_program_queue.enqueue(std::move(data));
       eventfd_write(new_radio_client_fd, 1); //notify the program thread using our eventfd
+    }
+
+    void post_new_radio_client_response_to_server(int ws_client_idx, int ws_client_id, std::vector<char> &&buff){
+      if(!tcp_server) return; // need this stuff set before posting any messages
+      message_post_data data;
+      data.msg_type = message_type::new_radio_client_response;
+      data.item_idx = ws_client_idx;
+      data.additional_info = ws_client_id;
+      data.buff = std::move(buff);
+      to_server_queue.enqueue(std::move(data));
+      tcp_server->notify_event();
     }
     
     message_post_data get_from_to_program_queue(){ // so called from main program thread
@@ -169,6 +199,13 @@ namespace web_server{
     void websocket_process_read_cb(int client_idx, char *buffer, int length);
     bool websocket_process_write_cb(int client_idx); //returns whether or not this was used
     void websocket_accept_read_cb(const std::string& sec_websocket_key, const std::string &path, int client_idx); //used in the read callback to accept web sockets
+
+    int get_ws_client_tcp_client_idx(int ws_client_idx, int ws_client_id){
+      auto &ws_client = websocket_clients[ws_client_idx];
+      if(websocket_clients[ws_client_idx].id == ws_client_id)
+        return ws_client.client_idx;
+      return -1;
+    }
 
     //websocket data
     std::unordered_set<int> all_websocket_connections{}; //this is used for the duration of the connection (even after we've sent the close request)

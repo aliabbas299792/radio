@@ -1,0 +1,4 @@
+- Issues with the duration of audio, and possibly with how the last_10_items thing works
+- Add websocket ping, since the socket will be killed if inactive for more than a certain period of time (consequence of SO_KEEPALIVE I think)
+- Add sets of websocket clients on each thread subscribed to a particular endpoint
+- Have 2 different types of broadcast, full broadcast (audio + music info) and partial (just music info)

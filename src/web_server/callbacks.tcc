@@ -14,7 +14,7 @@ void accept_cb(int client_idx, tcp_tls_server::server<T> *tcp_server, void *cust
 }
 
 template<server_type T>
-void close_cb(int client_idx, int broadcast_additional_info, tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the accept callback
+void close_cb(int client_idx, int broadcast_additional_info, tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the close callback
   const auto web_server = (basic_web_server<T>*)custom_obj;
 
   if(broadcast_additional_info != -1){ // only a broadcast if this is not -1
@@ -28,7 +28,7 @@ void close_cb(int client_idx, int broadcast_additional_info, tcp_tls_server::ser
 }
 
 template<server_type T>
-void event_cb(tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the accept callback
+void event_cb(tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the event callback
   const auto web_server = (basic_web_server<T>*)custom_obj;
   const auto &client_idxs = web_server->active_websocket_connections_client_idxs;
 
@@ -67,12 +67,17 @@ void event_cb(tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the ac
 }
 
 template<server_type T>
-void custom_read_cb(int client_idx, int fd, std::vector<char> &&buff, tcp_tls_server::server<T> *tcp_server, void *custom_obj){
+void custom_read_cb(int client_idx, int fd, std::vector<char> &&buff, tcp_tls_server::server<T> *tcp_server, void *custom_obj){ // the custom read callback
   const auto web_server = (basic_web_server<T>*)custom_obj;
 
   if(fd == web_server->web_cache.inotify_fd){
     web_server->web_cache.inotify_event_handler(reinterpret_cast<inotify_event*>(&buff[0])->wd);
-    tcp_server->custom_read_req(web_server->web_cache.inotify_fd, sizeof(inotify_event)); //always read from inotify_fd - we only read size of event, since we monitor files
+    tcp_server->custom_read_req(fd, min_inotify_read_size); //always read from inotify_fd - we only read size of event, since we monitor files
+  }else if(fd == web_server->ws_ping_timerfd){
+    // ping the websockets to prevent their connections from being considered idle (since they respond with a pong packet)
+    web_server->ping_all_websockets(); // pings all the websockets
+
+    tcp_server->custom_read_req(fd, sizeof(uint64_t)); // rearms the timer
   }else{
     close(fd); //close the file fd finally, since we've read what we needed to
 

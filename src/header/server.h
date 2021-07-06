@@ -245,7 +245,7 @@ namespace tcp_tls_server {
       }
 
       template<typename U>
-      void broadcast_message(U begin, U end, int num_clients, const char *buff, size_t length, uint64_t custom_info = 0){ //if the buff pointer is ever invalidated, it will just fail to write - so sort of unsafe on its own
+      void broadcast_message(U begin, U end, int num_clients, const char *buff, size_t length, uint64_t custom_info = -1){ //if the buff pointer is ever invalidated, it will just fail to write - so sort of unsafe on its own
         if(num_clients > 0){
           for(auto client_idx_ptr = begin; client_idx_ptr != end; client_idx_ptr++){
             auto &client = clients[(int)*client_idx_ptr];
@@ -310,7 +310,7 @@ namespace tcp_tls_server {
       }
 
       template<typename U>
-      void broadcast_message(U begin, U end, int num_clients, const char *buff, size_t length, uint64_t custom_info = 0){ //if the buff pointer is ever invalidated, it will just fail to write - so sort of unsafe on its own
+      void broadcast_message(U begin, U end, int num_clients, const char *buff, size_t length, uint64_t custom_info = -1){ //if the buff pointer is ever invalidated, it will just fail to write - so sort of unsafe on its own
         if(num_clients > 0){
           for(auto client_idx_ptr = begin; client_idx_ptr != end; client_idx_ptr++){
             auto &client = clients[(int)*client_idx_ptr];

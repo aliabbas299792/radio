@@ -103,7 +103,9 @@ namespace web_server{
     static std::vector<char> make_ws_frame(const std::string &packet_msg, websocket_non_control_opcodes opcode);
     
     basic_web_server(basic_web_server &&server) = default;
-    basic_web_server() {};
+    basic_web_server() {
+      utility::set_timerfd_interval(ws_ping_timerfd, 30000); // the ping timer should go off every 30 seconds
+    };
 
     void set_tcp_server(tcp_tls_server::server<T> *tcp_server); //required to be called to ensure pointer to TCP server is present
 
@@ -206,6 +208,22 @@ namespace web_server{
         return ws_client.client_idx;
       return -1;
     }
+
+    void ping_all_websockets(){
+      if(tcp_server && websocket_clients.size()){
+        static std::vector<char> ping_data = make_ws_frame("", websocket_non_control_opcodes::ping);
+
+        tcp_server->broadcast_message(
+          active_websocket_connections_client_idxs.begin(),
+          active_websocket_connections_client_idxs.end(),
+          active_websocket_connections_client_idxs.size(),
+          ping_data.data(),
+          ping_data.size()
+        ); // send the ping message
+      }
+    }
+
+    const int ws_ping_timerfd = timerfd_create(CLOCK_MONOTONIC, 0); // used for pinging ws connections
 
     //websocket data
     std::unordered_set<int> all_websocket_connections{}; //this is used for the duration of the connection (even after we've sent the close request)

@@ -23,7 +23,8 @@ void central_web_server::thread_server_runner(web_server::tls_web_server &basic_
   ); //pass function pointers and a custom object
 
   basic_web_server.set_tcp_server(&tcp_server); //required to be called, to give it a pointer to the server
-
+  tcp_server.custom_read_req(basic_web_server.ws_ping_timerfd, sizeof(uint64_t)); // start reading on the ping timerfd
+  
   tcp_server.start();
 }
 
@@ -41,6 +42,7 @@ void central_web_server::thread_server_runner(web_server::plain_web_server &basi
   ); //pass function pointers and a custom object
   
   basic_web_server.set_tcp_server(&tcp_server); //required to be called, to give it a pointer to the server
+  tcp_server.custom_read_req(basic_web_server.ws_ping_timerfd, sizeof(uint64_t)); // start reading on the ping timerfd
   
   tcp_server.start();
 }

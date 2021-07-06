@@ -128,7 +128,7 @@ int basic_web_server<T>::new_ws_client(int client_idx){
 
     auto &freed_client = websocket_clients[index];
 
-    const auto new_id = (freed_client.id + 1) % 1000; //ID loops every 1000
+    const auto new_id = (freed_client.id + 1) % 1000000; //ID loops every 1000000
     freed_client = ws_client();
     freed_client.id = new_id;
   }else{
@@ -139,7 +139,8 @@ int basic_web_server<T>::new_ws_client(int client_idx){
   websocket_clients[index].client_idx = client_idx; // for the tcp layer sockets
 
   all_websocket_connections.insert(index); // stores ws_client_idx
-  active_websocket_connections_client_idxs.insert(client_idx); // uses the tcp layer socket idx because it's used early on to determine if a connection ws or not
+  active_websocket_connections_client_idxs.insert(client_idx);
+  // above uses the tcp layer socket idx because it's used early on to determine if a connection ws or not, and for pinging
 
   return index;
 }

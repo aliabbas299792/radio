@@ -70,7 +70,7 @@ void audio_server::run(){
 
   // watching files/updating the server to reflect the directory correctly
   inotify_add_watch(inotify_fd, dir_path.c_str(), IN_CREATE | IN_DELETE); // watch the directory for changes
-  fd_read_req(inotify_fd, audio_events::INOTIFY_DIR_CHANGED, sizeof(struct inotify_event*) + NAME_MAX + 1); // guaranteed enough for at least 1 event
+  fd_read_req(inotify_fd, audio_events::INOTIFY_DIR_CHANGED, min_inotify_read_size);
   fd_read_req(send_audio_list, audio_events::AUDIO_LIST);
   fd_read_req(file_ready_fd, audio_events::FILE_READY);
 

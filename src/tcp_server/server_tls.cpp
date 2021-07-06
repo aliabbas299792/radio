@@ -165,7 +165,7 @@ void server<server_type::TLS>::req_event_handler(request *&req, int cqe_res){
 
         int written = wolfSSL_write(client.ssl, write_data_stuff.buff, write_data_stuff.length);
         if(written > -1){ //if it's not negative, it's all been written, so this write call is done
-          if(client.send_data.front().broadcast) //if it's broadcast, then custom_info must be the item_idx
+          if(client.send_data.front().broadcast) //if it's broadcast, then custom_info must be some data we want to pass to the read callback (such as in our case the item_idx)
             broadcast_additional_info = client.send_data.front().custom_info;
 
           client.send_data.pop();

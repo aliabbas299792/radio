@@ -146,7 +146,7 @@ int server_base<T>::setup_client(int client_socket){ //returns index into client
 
     auto &freed_client = clients[index];
 
-    const auto new_id = (freed_client.id + 1) % 100; //ID loops every 100
+    const auto new_id = (freed_client.id + 1) % 1000000; //ID loops every 1000000
     freed_client = client<T>();
     freed_client.id = new_id;
   }else{

@@ -1,9 +1,12 @@
 #ifndef SERVER_ENUMS
 #define SERVER_ENUMS
 
+#include <linux/limits.h>
 #include <vector> //for vectors
 
 enum class server_type { TLS, NON_TLS };
+
+constexpr size_t min_inotify_read_size = sizeof(struct inotify_event*) + NAME_MAX + 1;  // guaranteed enough for at least 1 event
 
 // for use elsewhere too
 constexpr int QUEUE_DEPTH = 256; //the maximum number of events which can be submitted to the io_uring submission queue ring at once, you can have many more pending requests though

@@ -9,7 +9,7 @@ enum class server_type { TLS, NON_TLS };
 constexpr int QUEUE_DEPTH = 256; //the maximum number of events which can be submitted to the io_uring submission queue ring at once, you can have many more pending requests though
 
 namespace tcp_tls_server {
-  enum class event_type{ ACCEPT, ACCEPT_READ, ACCEPT_WRITE, READ, WRITE, NOTIFICATION, CUSTOM_READ, TIMERFD, KILL };
+  enum class event_type{ ACCEPT, ACCEPT_READ, ACCEPT_WRITE, READ, WRITE, NOTIFICATION, CUSTOM_READ, KILL };
 
   constexpr int BACKLOG = 10; //max number of connections pending acceptance
   constexpr int READ_SIZE = 8192; //how much one read request should read

@@ -60,7 +60,7 @@ void server<server_type::NON_TLS>::write_connection(int client_idx, char* buff, 
 void server<server_type::NON_TLS>::close_connection(int client_idx) {
   auto &client = clients[client_idx];
 
-  if(client.num_write_reqs == 0){ // only erase this client if they haven't got any active write requests
+  if(client.num_write_reqs == 0 && active_connections.count(client_idx)){ // only erase this client if they haven't got any active write requests
     active_connections.erase(client_idx);
     client.send_data = {}; //free up all the data we might have wanted to send
 

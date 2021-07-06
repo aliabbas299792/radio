@@ -8,8 +8,7 @@
 
 #include <sys/syscall.h> //syscall stuff parameters (as in like __NR_io_uring_enter/__NR_io_uring_setup)
 #include <sys/mman.h> //for mmap
-#include <sys/eventfd.h> // for eventfd
-#include <sys/timerfd.h> // for timerfd
+#include <sys/eventfd.h> // for eventfd=
 
 #include <liburing.h> //for liburing
 
@@ -162,16 +161,12 @@ namespace tcp_tls_server {
       std::set<int> freed_indexes{}; //using a set to store free indexes instead
       std::vector<client<T>> clients{};
 
-      int timerfd = timerfd_create(CLOCK_MONOTONIC, 0); // used for pinging connections
-
       void add_tcp_accept_req();
 
       //need it protected rather than private, since need to access from children
       int add_write_req(int client_idx, event_type event, const char *buffer, unsigned int length); //this is for the case you want to write a buffer rather than a vector
       //used internally for sending messages
       int add_read_req(int client_idx, event_type event); //adds a read request to the io_uring ring
-      //arms the timerfd
-      void add_timerfd_read_req();
 
       void custom_read_req_continued(request *req, size_t last_read); //to finish off partial reads
       

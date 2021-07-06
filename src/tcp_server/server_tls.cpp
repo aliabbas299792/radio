@@ -17,7 +17,7 @@ void server<server_type::TLS>::kill_all_servers() {
 
 void server<server_type::TLS>::close_connection(int client_idx) {
   auto &client = clients[client_idx];
-  if(client.num_write_reqs == 0){
+  if(client.num_write_reqs == 0 && active_connections.count(client_idx)){
     wolfSSL_shutdown(client.ssl);
     wolfSSL_free(client.ssl);
 

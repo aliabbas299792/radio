@@ -150,8 +150,10 @@ void basic_web_server<T>::kill_client(int client_idx){ // be wary of this, I don
   int ws_client_idx = tcp_clients[client_idx].ws_client_idx;
   all_websocket_connections.erase(ws_client_idx); //connection definitely closed now
   
-  active_websocket_connections_client_idxs.erase(client_idx);
-  freed_indexes.insert(ws_client_idx);
+  if(active_websocket_connections_client_idxs.count(ws_client_idx)){
+    active_websocket_connections_client_idxs.erase(client_idx);
+    freed_indexes.insert(ws_client_idx);
+  }
 }
 
 template<server_type T>

@@ -132,7 +132,7 @@ bool basic_web_server<T>::send_file_request(int client_idx, const std::string &f
 template<server_type T>
 void basic_web_server<T>::set_tcp_server(tcp_tls_server::server<T> *server){
   tcp_server = server;
-  tcp_server->custom_read_req(web_cache.inotify_fd, min_inotify_read_size); //always read from inotify_fd - we only read size of event, since we monitor files
+  tcp_server->custom_read_req(web_cache.inotify_fd, inotify_read_size); //always read from inotify_fd - we only read size of event, since we monitor files
 }
 
 template<server_type T>

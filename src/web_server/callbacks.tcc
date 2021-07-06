@@ -67,12 +67,17 @@ void event_cb(tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the ev
 }
 
 template<server_type T>
-void custom_read_cb(int client_idx, int fd, std::vector<char> &&buff, tcp_tls_server::server<T> *tcp_server, void *custom_obj){ // the custom read callback
+void custom_read_cb(int client_idx, int fd, std::vector<char> &&buff, size_t read_bytes, tcp_tls_server::server<T> *tcp_server, void *custom_obj){ // the custom read callback
   const auto web_server = (basic_web_server<T>*)custom_obj;
 
   if(fd == web_server->web_cache.inotify_fd){
-    web_server->web_cache.inotify_event_handler(reinterpret_cast<inotify_event*>(&buff[0])->wd);
-    tcp_server->custom_read_req(fd, min_inotify_read_size); //always read from inotify_fd - we only read size of event, since we monitor files
+    int event_name_length = 0;
+    for(char *ptr = &buff[0]; ptr < &buff[0] + read_bytes; ptr += sizeof(inotify_event) + read_bytes){ // loop over all inotify events
+      auto event = reinterpret_cast<inotify_event*>(&buff[0]);
+      event_name_length = event->len; // updates the amount to increment each time
+      web_server->web_cache.inotify_event_handler(event->wd); // pass on the watch descriptor
+    }
+    tcp_server->custom_read_req(fd, inotify_read_size); //always read from inotify_fd - we only read size of event, since we monitor files
   }else if(fd == web_server->ws_ping_timerfd){
     // ping the websockets to prevent their connections from being considered idle (since they respond with a pong packet)
     web_server->ping_all_websockets(); // pings all the websockets

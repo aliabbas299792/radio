@@ -75,7 +75,7 @@ void server_base<T>::start(){ //function to run the server
           if(event_cb != nullptr) event_cb(static_cast<server<T>*>(this), custom_obj);
       }else if(req->event == event_type::CUSTOM_READ){
         if(req->read_data.size() == cqe->res + req->read_amount){
-          if(custom_read_cb != nullptr) custom_read_cb(req->client_idx, (int)req->custom_info, std::move(req->read_data), static_cast<server<T>*>(this), custom_obj);
+          if(custom_read_cb != nullptr) custom_read_cb(req->client_idx, (int)req->custom_info, std::move(req->read_data), cqe->res, static_cast<server<T>*>(this), custom_obj);
         }else{
           custom_read_req_continued(req, cqe->res);
           req = nullptr; //don't want it to be deleted yet

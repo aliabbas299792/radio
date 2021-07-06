@@ -116,8 +116,7 @@ class audio_server {
   std::string currently_processing_audio{}; // the name of the current file being processed - it is blank after processing
 
   std::chrono::system_clock::time_point current_audio_finish_time{};
-  std::chrono::system_clock::time_point last_broadcast_time{};
-  std::chrono::system_clock::time_point current_playback_time{};
+  std::chrono::system_clock::time_point current_playback_time{}; // is relative to the actual system clock
 
   static std::vector<audio_server*> audio_servers;
 

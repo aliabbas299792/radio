@@ -145,7 +145,7 @@ namespace web_cache {
         filepath_to_cache_idx[filepath] = current_idx;
         cache_idx_to_filepath[current_idx] = filepath;
 
-        current_item.watch = inotify_add_watch(inotify_fd, filepath.c_str(), IN_MODIFY);
+        current_item.watch = inotify_add_watch(inotify_fd, filepath.c_str(), IN_MODIFY); // doesn't watch for deleted/created files in the cache, only modified
         watch_to_cache_idx[current_item.watch] = current_idx;
 
         current_item.prev_item_idx = highest_idx; //promote to highest

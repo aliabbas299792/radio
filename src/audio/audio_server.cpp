@@ -69,16 +69,18 @@ void audio_server::run(){
   fd_read_req(kill_efd, audio_events::KILL);
 
   // watching files/updating the server to reflect the directory correctly
-  inotify_add_watch(inotify_fd, dir_path.c_str(), IN_CREATE | IN_DELETE); // watch the directory for changes
-  fd_read_req(inotify_fd, audio_events::INOTIFY_DIR_CHANGED, min_inotify_read_size);
+  inotify_add_watch(inotify_fd, dir_path.c_str(), IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO); // watch the directory for changes
+  fd_read_req(inotify_fd, audio_events::INOTIFY_DIR_CHANGED, inotify_read_size);
+
   fd_read_req(send_audio_list, audio_events::AUDIO_LIST);
   fd_read_req(file_ready_fd, audio_events::FILE_READY);
 
   // time stuff
   utility::set_timerfd_interval(timerfd, BROADCAST_INTERVAL_MS);
   fd_read_req(timerfd, audio_events::BROADCAST_TIMER);
+
   current_audio_finish_time = std::chrono::system_clock::now();
-  last_broadcast_time = current_audio_finish_time;
+  current_playback_time = current_audio_finish_time;
 
   char *strtok_saveptr{};
 
@@ -117,30 +119,37 @@ void audio_server::run(){
         fd_read_req(timerfd, audio_events::BROADCAST_TIMER);
         break;
       case audio_events::INOTIFY_DIR_CHANGED:
-        auto data = reinterpret_cast<inotify_event*>(req->buff.data());
-        auto file_name = data->name;
-        auto original_file_name = file_name;
+        auto &buff = req->buff;
+        int event_name_length = 0;
+        for(char *ptr = &buff[0]; ptr < &buff[0] + cqe->res; ptr += sizeof(inotify_event) + event_name_length){ // loop over all inotify events
+          auto data = reinterpret_cast<inotify_event*>(ptr);
+          event_name_length = data->len; // updates the amount to increment each time
+          auto file_name = data->name;
+          auto original_file_name = file_name;
 
-        const char *file_extension{};
-        const char *tmp_file_extension{};
-        while((tmp_file_extension = strtok_r(file_name, ".", &strtok_saveptr)) != nullptr){
-          file_name = nullptr;
-          file_extension = tmp_file_extension;
+          const char *file_extension{};
+          const char *tmp_file_extension{};
+          while((tmp_file_extension = strtok_r(file_name, ".", &strtok_saveptr)) != nullptr){
+            file_name = nullptr;
+            file_extension = tmp_file_extension;
+          }
+
+          std::string file_name_str = std::string(original_file_name);
+
+          std::cout <<file_name_str << "\n";
+
+          if(data->mask & IN_CREATE){
+            slash_separated_audio_list += "/" + file_name_str;
+            audio_list.push_back(file_name_str);
+            post_audio_list_update(true, file_name_str); // we've added a file
+          }else{
+            audio_list.erase(std::remove(audio_list.begin(), audio_list.end(), file_name_str), audio_list.end()); // remove the deleted file
+            slash_separated_audio_list = utility::remove_from_slash_string(slash_separated_audio_list, file_name_str);
+            post_audio_list_update(false, file_name_str); // we've removed a file
+          }
         }
 
-        std::string file_name_str = std::string(original_file_name);
-
-        if(data->mask & IN_CREATE){
-          slash_separated_audio_list += "/" + file_name_str;
-          audio_list.push_back(file_name_str);
-          post_audio_list_update(true, file_name_str); // we've added a file
-        }else{
-          audio_list.erase(std::remove(audio_list.begin(), audio_list.end(), file_name_str), audio_list.end()); // remove the deleted file
-          slash_separated_audio_list = utility::remove_from_slash_string(slash_separated_audio_list, file_name_str);
-          post_audio_list_update(false, file_name_str); // we've removed a file
-        }
-
-        fd_read_req(inotify_fd, audio_events::INOTIFY_DIR_CHANGED, sizeof(struct inotify_event*) + NAME_MAX + 1); // guaranteed enough for atleast 1 event
+        fd_read_req(inotify_fd, audio_events::INOTIFY_DIR_CHANGED, inotify_read_size); // guaranteed enough for atleast 1 event
         break;
     }
     
@@ -171,19 +180,20 @@ void audio_server::broadcast_routine(){
     // if there are less than BROADCAST_INTERVAL_MS long till the end of this file, and nothing is currently being
     currently_processing_audio = get_requested_audio();
     if(currently_processing_audio == ""){ // if there was nothing in the requested queue
+      if(audio_list.size() == 0)
+        utility::fatal_error("There are no opus files in the audio directory " + dir_path);
       if(audio_list.size() < 10)
         currently_processing_audio = audio_list[utility::random_number(0, audio_list.size()-1)]; // select a file at random
       else{
         std::cout << audio_list.size() << "\n";
-        // a very rough way of making sure you don't get repeats too often
+        // a very rough way of making sure you don't get repeats too often - probably won't get stuck for a long time, not likely
         auto idx = utility::random_number(0, audio_list.size()-1); // select an index which hasn't been used for the previous 10 items
-        while(last_10_items.count(idx)){
+        while(last_10_items.count(idx))
           idx = utility::random_number(0, audio_list.size()-1);
-        }
 
         if(last_10_items.size() == 10) // only do this if there are already 10 elements in there
           last_10_items.erase(std::prev(last_10_items.end())); // removes the last element of the set
-        last_10_items.insert(idx); // and add this to the exclusion list
+        last_10_items.insert(last_10_items.begin(), idx); // and add this to the exclusion list (at the beginning)
 
         currently_processing_audio = audio_list[idx];
       }
@@ -210,7 +220,9 @@ void audio_server::broadcast_routine(){
     data_chunk["duration"] = chunk.duration;
     data_chunk["pages"] = data_pages;
 
-    std::cout << "broacasting chunk of duration: " << chunk.duration << "\n";
+    current_playback_time += std::chrono::milliseconds(chunk.duration); // increase it with each broadcast
+
+    std::cout << "this is how far ahead playback is: " << std::chrono::duration_cast<std::chrono::milliseconds>(current_playback_time - std::chrono::system_clock::now()).count() << "\n";
     broadcast_to_central_server(data_chunk.dump());
   }
 }

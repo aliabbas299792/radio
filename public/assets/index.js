@@ -1,5 +1,4 @@
 const button = document.getElementById('button');
-const selector = document.getElementById('selector');
 let context = new AudioContext();
 let currentTime = 0;
 let typedArrayPrevious = new Uint8Array();
@@ -103,4 +102,16 @@ async function playMusic(typedArrayCurrent){ //takes 1 packet of audio, decode, 
 
     typedArrayPrevious = typedArrayCurrent;
   }
+}
+
+function playAudio(){
+  const ws = new WebSocket("wss://radio.erewhon.xyz/ws/radio/test_server")
+  ws.onmessage = msg => {
+    audio_data = JSON.parse(msg.data)
+    for(const page of audio_data.pages){
+      arr = new Uint8Array(page.buff)
+      playMusic(arr)
+    }
+  }
+  button.innerText = "Playing...";
 }

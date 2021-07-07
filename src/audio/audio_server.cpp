@@ -180,20 +180,19 @@ void audio_server::broadcast_routine(){
     // if there are less than BROADCAST_INTERVAL_MS long till the end of this file, and nothing is currently being
     currently_processing_audio = get_requested_audio();
     if(currently_processing_audio == ""){ // if there was nothing in the requested queue
-      if(audio_list.size() == 0)
+      if(audio_list.size() == 10)
         utility::fatal_error("There are no opus files in the audio directory " + dir_path);
-      if(audio_list.size() < 10)
+      if(audio_list.size() < 2)
         currently_processing_audio = audio_list[utility::random_number(0, audio_list.size()-1)]; // select a file at random
       else{
-        std::cout << audio_list.size() << "\n";
         // a very rough way of making sure you don't get repeats too often - probably won't get stuck for a long time, not likely
         auto idx = utility::random_number(0, audio_list.size()-1); // select an index which hasn't been used for the previous 10 items
-        while(last_10_items.count(idx))
+        while(std::find(last_10_items.begin(), last_10_items.end(), idx) != last_10_items.end()) // make sure element isn't in the linked list
           idx = utility::random_number(0, audio_list.size()-1);
 
-        if(last_10_items.size() == 10) // only do this if there are already 10 elements in there
-          last_10_items.erase(std::prev(last_10_items.end())); // removes the last element of the set
-        last_10_items.insert(last_10_items.begin(), idx); // and add this to the exclusion list (at the beginning)
+        if(last_10_items.size() == 10) // only do this if there are already 10 elements in there=
+          last_10_items.pop_back(); // removes the last element of the list
+        last_10_items.push_front(idx); // and add this to the exclusion list (at the beginning)
 
         currently_processing_audio = audio_list[idx];
       }
@@ -336,7 +335,7 @@ void audio_server::process_audio(file_transfer_data &&data){
     chunks_of_audio.push_back(chunk);
   }
 
-  std::cout << duration_of_audio << " ## " << "\n";
+  std::cout << float(duration_of_audio)/60000.0 << " is the length in minutes\n";
 
   current_audio_finish_time += std::chrono::milliseconds(duration_of_audio);
   currently_processing_audio = ""; // we've processed it

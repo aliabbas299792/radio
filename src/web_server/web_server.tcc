@@ -123,7 +123,7 @@ bool basic_web_server<T>::send_file_request(int client_idx, const std::string &f
     tcp_server->write_connection(client_idx, cache_data.buff, cache_data.size);
   }else{
     tcp_clients[client_idx].last_requested_read_filepath =  filepath; //so that when the file is read, it will be stored with the correct file path
-    tcp_server->custom_read_req(file_fd, file_size, client_idx, std::move(send_buffer), headers.size());
+    tcp_server->custom_read_req(file_fd, file_size, true, client_idx, std::move(send_buffer), headers.size()); // true is for using custom_read_req_continued
   }
 
   return true;

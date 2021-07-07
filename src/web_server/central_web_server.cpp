@@ -262,16 +262,13 @@ void central_web_server::run(){
               std::vector<char> response_data{};
               if(audio_server::server_id_map.count(data.additional_str)){ // the radio server name is sent in data.additional_str
                 // send the latest cached data for this specific server to this user, data.item_idx is the ws_client_idx and data.additional_info is the ws_client_id
-                std::cout << "test\n";
                 auto server_id = audio_server::server_id_map[data.additional_str];
                 audio_server *inst = audio_server::instance(server_id);
                 response_data = inst->main_thread_state.last_broadcast_data;
-                std::cout << "test 2\n";
               }else{
                 response_data.push_back(-1); // the only element will be a -1, which indicates the server wasn't found, and so disconnect the client
               }
               server.post_new_radio_client_response_to_server(data.item_idx, data.additional_info, std::move(response_data));
-              std::cout << "test 3\n";
               break;
           }
         }
@@ -363,8 +360,6 @@ void central_web_server::audio_server_event_req_handler(int eventfd, int server_
 
     auto ws_data = make_ws_frame(data, web_server::websocket_non_control_opcodes::text_frame);
     server->main_thread_state.last_broadcast_data = ws_data;
-
-    std::cout << ws_data.size() << " is send data size\n";
 
     auto item_data = store.insert_item(std::move(ws_data), num_threads);
 

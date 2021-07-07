@@ -70,6 +70,7 @@ namespace tcp_tls_server {
     // fields used for read requests
     std::vector<char> read_data{};
     size_t read_amount{}; //how much has been read (in case of multi read requests)
+    bool auto_retry = false; // whether or not to use custom_read_req_continued
     
     // extra
     int64_t custom_info{}; //any custom info you want to attach to the request
@@ -198,7 +199,7 @@ namespace tcp_tls_server {
       void read_connection(int client_idx);
 
       //to read for a custom fd and be notified via the CUSTOM_READ event
-      void custom_read_req(int fd, size_t to_read, int client_idx = -1, std::vector<char> &&buff = {}, size_t read_amount = 0);
+      void custom_read_req(int fd, size_t to_read, bool auto_retry = false, int client_idx = -1, std::vector<char> &&buff = {}, size_t read_amount = 0); // auto_retry is for calling custom_read_req_continued
 
       void notify_event();
       void kill_server(); // will kill the server

@@ -55,7 +55,6 @@ void event_cb(tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the ev
         // both are needed to do a simple check to make sure it's the right connection
         if(data.buff.size() > 1 && data.buff[0] != -1){
           // broadcast data
-          std::cout << "idx: " << tcp_client_idx << "\n";
           tcp_server->write_connection(tcp_client_idx, std::move(data.buff));
         }else{
           // close connection
@@ -77,7 +76,7 @@ void custom_read_cb(int client_idx, int fd, std::vector<char> &&buff, size_t rea
       event_name_length = event->len; // updates the amount to increment each time
       web_server->web_cache.inotify_event_handler(event->wd); // pass on the watch descriptor
     }
-    tcp_server->custom_read_req(fd, inotify_read_size); //always read from inotify_fd - we only read size of event, since we monitor files
+    tcp_server->custom_read_req(fd, inotify_read_size, false); //always read from inotify_fd - we only read size of event, since we monitor files, and don't bother reading as much as you can
   }else if(fd == web_server->ws_ping_timerfd){
     // ping the websockets to prevent their connections from being considered idle (since they respond with a pong packet)
     web_server->ping_all_websockets(); // pings all the websockets

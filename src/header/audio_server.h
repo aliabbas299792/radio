@@ -3,6 +3,7 @@
 
 #include <chrono>
 #include <iostream>
+#include <list>
 
 #include <dirent.h>
 #include <sys/eventfd.h>
@@ -94,7 +95,7 @@ class audio_server {
   std::vector<std::string> audio_file_paths{};
   std::vector<std::string> audio_list{};
   std::string slash_separated_audio_list{}; // file names are in quotes
-  std::set<int> last_10_items{};
+  std::list<int> last_10_items{};
   std::deque<audio_chunk> chunks_of_audio{};
 
   //

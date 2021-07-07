@@ -35,13 +35,10 @@ void server_base<T>::start(){ //function to run the server
       {
         if(req->event == event_type::ACCEPT_WRITE || req->event == event_type::WRITE)
           req->buffer = nullptr; //done with the request buffer
-        std::cout << "res: " << cqe->res << "\n";
         if(cqe->res <= 0 && clients[req->client_idx].id == req->ID){ // only do these if the client hasn't been replaced
           auto &client = clients[req->client_idx];
           if(req->event == event_type::WRITE || req->event == event_type::ACCEPT_WRITE)
             client.num_write_reqs--; // a write operation failed, decrement the number of active write operaitons for this client
-
-          std::cout << "client is become death " << req->client_idx << "\n";
 
           if(client.num_write_reqs == 0){
             while(client.send_data.size()){
@@ -74,7 +71,7 @@ void server_base<T>::start(){ //function to run the server
         while(efd_data--) // repeat this for the number of times the eventfd has gone off
           if(event_cb != nullptr) event_cb(static_cast<server<T>*>(this), custom_obj);
       }else if(req->event == event_type::CUSTOM_READ){
-        if(req->read_data.size() == cqe->res + req->read_amount){
+        if(req->read_data.size() == cqe->res + req->read_amount || !req->auto_retry){ // if we said we don't want to use custom_read_req_continued, then we just process the data now
           if(custom_read_cb != nullptr) custom_read_cb(req->client_idx, (int)req->custom_info, std::move(req->read_data), cqe->res, static_cast<server<T>*>(this), custom_obj);
         }else{
           custom_read_req_continued(req, cqe->res);
@@ -279,13 +276,14 @@ int server_base<T>::add_write_req(int client_idx, event_type event, const char *
 }
 
 template<server_type T>
-void server_base<T>::custom_read_req(int fd, size_t to_read, int client_idx, std::vector<char> &&buff, size_t read_amount){
+void server_base<T>::custom_read_req(int fd, size_t to_read, bool auto_retry, int client_idx, std::vector<char> &&buff, size_t read_amount){
   request *req = new request();
   req->client_idx = client_idx;
   req->total_length = to_read;
   req->read_amount = read_amount;
   req->read_data = buff;
   req->custom_info = fd;
+  req->auto_retry = auto_retry;
   req->event = event_type::CUSTOM_READ;
 
   req->read_data.resize(to_read + read_amount); //needs this much at least

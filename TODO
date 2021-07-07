@@ -1,3 +1,2 @@
-- Issues with the duration of audio
 - Add sets of websocket clients on each thread subscribed to a particular endpoint
 - Have 2 different types of broadcast, full broadcast (audio + music info) and partial (just music info)

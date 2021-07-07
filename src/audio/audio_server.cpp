@@ -176,7 +176,7 @@ std::string audio_server::get_broadcast_audio(){
 }
 
 void audio_server::broadcast_routine(){
-  if(currently_processing_audio == "" && std::chrono::system_clock::now() >= current_audio_finish_time - std::chrono::milliseconds(BROADCAST_INTERVAL_MS * 2)){ // *2 since we want to make sure a small chunk will have enough
+  if(currently_processing_audio == "" && std::chrono::system_clock::now() >= current_audio_finish_time - std::chrono::milliseconds(BROADCAST_INTERVAL_MS)){
     // if there are less than BROADCAST_INTERVAL_MS long till the end of this file, and nothing is currently being
     currently_processing_audio = get_requested_audio();
     if(currently_processing_audio == ""){ // if there was nothing in the requested queue
@@ -222,6 +222,7 @@ void audio_server::broadcast_routine(){
     current_playback_time += std::chrono::milliseconds(chunk.duration); // increase it with each broadcast
 
     std::cout << "this is how far ahead playback is: " << std::chrono::duration_cast<std::chrono::milliseconds>(current_playback_time - std::chrono::system_clock::now()).count() << "\n";
+    std::cout << "\tthis is the last chunk duration: " << chunk.duration << "\n";
     broadcast_to_central_server(data_chunk.dump());
   }
 }
@@ -311,36 +312,37 @@ void audio_server::process_audio(file_transfer_data &&data){
 
   int audio_data_idx = 0;
 
+  bool is_chunks_of_audio_empty = chunks_of_audio.size() == 0;
+
   uint64_t duration_of_audio = 0;
   for(const auto& page : audio_data)
     duration_of_audio += page.duration;
 
-  if(chunks_of_audio.size() && chunks_of_audio.back().duration < BROADCAST_INTERVAL_MS){ // push to the most recent chunk if it's not full
-    auto &old_chunk = chunks_of_audio.back();
-    std::cout << "OLD CHUNK TIME\n";
-    while(old_chunk.insert_data(std::move(audio_data[audio_data_idx++]))){
-      if(audio_data_idx == audio_data.size()) break; // don't wanna segfault by overstepping the boundaries
-    }
-    if(audio_data_idx != audio_data.size())
-      audio_data_idx--; // the reason that while loop broke was because the chunk was filled, so lower the idx again
-  }
-
   while(audio_data_idx < audio_data.size()){
     audio_chunk chunk{};
     while(chunk.insert_data(std::move(audio_data[audio_data_idx++]))){ // fill the chunk up as much as possible
-      if(audio_data_idx == audio_data.size()) break; // don't wanna segfault by overstepping the boundaries
+      if(audio_data_idx == audio_data.size()) break; // don't want to segfault by overstepping the boundaries
     }
     if(audio_data_idx != audio_data.size())
       audio_data_idx--; // the reason that while loop broke was because the chunk was filled, so lower the idx again
-    chunks_of_audio.push_back(chunk);
+
+    if(audio_data_idx == audio_data.size() && chunk.duration < BROADCAST_INTERVAL_MS){ // if the last chunk is too small, concatenate the last 2
+      auto &last_chunk = chunks_of_audio.back();
+      last_chunk.pages.insert(last_chunk.pages.end(), chunk.pages.begin(), chunk.pages.end());
+      last_chunk.duration += chunk.duration;
+    }else
+      chunks_of_audio.push_back(chunk);
   }
 
-  std::cout << float(duration_of_audio)/60000.0 << " is the length in minutes\n";
+  std::cout << std::floor(float(duration_of_audio)/60000.0) << "m " << std::round((float(duration_of_audio)/60000.0 - std::floor(float(duration_of_audio)/60000.0))*60) << "s is the duration\n";
 
   current_audio_finish_time += std::chrono::milliseconds(duration_of_audio);
   currently_processing_audio = ""; // we've processed it
 
   broadcast_routine();
+
+  if(is_chunks_of_audio_empty)
+    broadcast_routine(); // extra broadcast routine if it's right at the start of the application
 }
 
 void audio_server::respond_with_file_list(){

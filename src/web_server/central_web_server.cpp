@@ -259,16 +259,22 @@ void central_web_server::run(){
               store.free_item(data.item_idx);
               break;
             case web_server::message_type::new_radio_client:
-              std::vector<char> response_data{};
+              std::vector<char> response_data_first{};
+              std::vector<char> response_data_second{};
               if(audio_server::server_id_map.count(data.additional_str)){ // the radio server name is sent in data.additional_str
                 // send the latest cached data for this specific server to this user, data.item_idx is the ws_client_idx and data.additional_info is the ws_client_id
                 auto server_id = audio_server::server_id_map[data.additional_str];
                 audio_server *inst = audio_server::instance(server_id);
-                response_data = inst->main_thread_state.last_broadcast_data;
+                response_data_first = inst->main_thread_state.second_last_broadcast_data; // since this would be the 2nd last item, so send it first
+                response_data_second = inst->main_thread_state.last_broadcast_data; // and this would be the last item, so send it after that
               }else{
-                response_data.push_back(-1); // the only element will be a -1, which indicates the server wasn't found, and so disconnect the client
+                response_data_first.push_back(-1); // the only element will be a -1, which indicates the server wasn't found, and so disconnect the client
               }
-              server.post_new_radio_client_response_to_server(data.item_idx, data.additional_info, std::move(response_data));
+
+              server.post_new_radio_client_response_to_server(data.item_idx, data.additional_info, std::move(response_data_first));
+
+              if(response_data_second.size() != 0)
+                server.post_new_radio_client_response_to_server(data.item_idx, data.additional_info, std::move(response_data_second));
               break;
           }
         }
@@ -357,9 +363,11 @@ void central_web_server::audio_server_event_req_handler(int eventfd, int server_
     add_read_req(fd, size, server_id); // add a read request for this file, setting the server_id correctly - need it to locate the server
   }else if(eventfd == server->broadcast_fd){
     auto data = server->get_broadcast_audio();
+    auto &main_thread_state = server->main_thread_state;
 
     auto ws_data = make_ws_frame(data, web_server::websocket_non_control_opcodes::text_frame);
-    server->main_thread_state.last_broadcast_data = ws_data;
+    main_thread_state.second_last_broadcast_data = main_thread_state.last_broadcast_data;
+    main_thread_state.last_broadcast_data = ws_data;
 
     auto item_data = store.insert_item(std::move(ws_data), num_threads);
 

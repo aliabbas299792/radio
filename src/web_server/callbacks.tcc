@@ -54,7 +54,7 @@ void event_cb(tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the ev
       if((tcp_client_idx = web_server->get_ws_client_tcp_client_idx(data.item_idx, data.additional_info)) != -1){ // ws_client_idx, ws_client_id respectively
         // both are needed to do a simple check to make sure it's the right connection
         if(data.buff.size() > 1 && data.buff[0] != -1){
-          // broadcast data
+          // send data to this client
           tcp_server->write_connection(tcp_client_idx, std::move(data.buff));
         }else{
           // close connection

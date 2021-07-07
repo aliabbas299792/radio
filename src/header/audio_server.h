@@ -45,7 +45,7 @@ static struct {
   std::array<float, 4> celtOnly{2.5, 5, 10, 20};
 } audio_frame_durations;
 
-constexpr int BROADCAST_INTERVAL_MS = 5000;
+constexpr int BROADCAST_INTERVAL_MS = 1000;
 
 struct audio_req {
   audio_events event{};
@@ -178,6 +178,7 @@ public:
     
     std::unordered_map<int, std::string> fd_to_filepath{};
     std::vector<char> last_broadcast_data{};
+    std::vector<char> second_last_broadcast_data{};
   } main_thread_state;
 
   ~audio_server(){ // this will be called as soon as it goes out of scope, unlike the web

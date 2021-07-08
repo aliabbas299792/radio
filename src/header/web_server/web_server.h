@@ -53,6 +53,18 @@ namespace web_server{
     std::string additional_str{};
   };
 
+  struct broadcast_set_data {
+    std::unordered_set<int>::iterator begin{};
+    std::unordered_set<int>::iterator end{};
+    size_t size{};
+    broadcast_set_data(std::unordered_set<int> &set){
+      begin = set.begin();
+      end = set.end();
+      size = set.size();
+    }
+    broadcast_set_data(){}
+  };
+
   struct broadcast_data_items {
     const char* buff_ptr{};
     size_t data_len{};
@@ -84,7 +96,6 @@ namespace web_server{
     //related to opening/closing connections
     std::string get_accept_header_value(std::string input); //gets the appropriate header value from the websocket connection request
     int new_ws_client(int client_idx); //makes a new websocket client
-    bool close_ws_connection_req(int ws_client_idx, bool client_already_closed = false); //puts in a request to close this websocket connection
     bool close_ws_connection_potential_confirm(int ws_client_idx); //actually closes the websocket connection (it's sent a close notification)
 
     //where data about connections is stored
@@ -100,10 +111,11 @@ namespace web_server{
     moodycamel::ReaderWriterQueue<message_post_data> to_program_queue{};
 
   public:
-    static std::vector<char> make_ws_frame(const std::string &packet_msg, websocket_non_control_opcodes opcode);
+    static bool instance_exists; // used by anything which needs to be initialised before server threads are made
     
     basic_web_server(basic_web_server &&server) = default;
     basic_web_server() {
+      instance_exists = true;
       utility::set_timerfd_interval(ws_ping_timerfd, 30000); // the ping timer should go off every 30 seconds
     };
 
@@ -121,6 +133,21 @@ namespace web_server{
     int new_radio_client_fd = eventfd(0, 0);
     
     std::vector<broadcast_data_items> broadcast_data{}; // data from any broadcasts sent from the program thread
+
+    std::vector<std::unordered_set<int>> broadcast_ws_clients_tcp_client_idxs{}; // subscribed websocket client idxs are in here
+    void subscribe_client(int channel_id, int client_idx){
+      if(broadcast_ws_clients_tcp_client_idxs.size() <= channel_id)
+        broadcast_ws_clients_tcp_client_idxs.resize(channel_id+1);
+      broadcast_ws_clients_tcp_client_idxs[channel_id].insert(client_idx);
+    }
+    
+    broadcast_set_data get_broadcast_set_data(int channel_id){
+      if(broadcast_ws_clients_tcp_client_idxs.size() <= channel_id)
+        broadcast_ws_clients_tcp_client_idxs.resize(channel_id+1);
+      if(channel_id >= 0)
+        return broadcast_set_data(broadcast_ws_clients_tcp_client_idxs[channel_id]);
+      return broadcast_set_data();
+    }
 
     void post_message_to_server_thread(message_type msg_type, const char *buff_ptr, size_t length, int item_idx, uint64_t additional_info = -1){ //called from the program thread, to notify the server thread
       if(!tcp_server) return; // need this set before posting any messages
@@ -157,12 +184,13 @@ namespace web_server{
       eventfd_write(new_radio_client_fd, 1); //notify the program thread using our eventfd
     }
 
-    void post_new_radio_client_response_to_server(int ws_client_idx, int ws_client_id, std::vector<char> &&buff){
+    void post_new_radio_client_response_to_server(int ws_client_idx, int ws_client_id, std::vector<char> &&buff, int broadcast_channel_id = -1){
       if(!tcp_server) return; // need this stuff set before posting any messages
       message_post_data data;
       data.msg_type = message_type::new_radio_client_response;
       data.item_idx = ws_client_idx;
       data.additional_info = ws_client_id;
+      data.additional_info = broadcast_channel_id;
       data.buff = std::move(buff);
       to_server_queue.enqueue(std::move(data));
       tcp_server->notify_event();
@@ -198,6 +226,10 @@ namespace web_server{
     //
 
     //websocket public methods
+    static std::vector<char> make_ws_frame(const std::string &packet_msg, websocket_non_control_opcodes opcode);
+    
+    bool close_ws_connection_req(int ws_client_idx, bool client_already_closed = false); //puts in a request to close this websocket connection
+
     void websocket_process_read_cb(int client_idx, char *buffer, int length);
     bool websocket_process_write_cb(int client_idx); //returns whether or not this was used
     void websocket_accept_read_cb(const std::string& sec_websocket_key, const std::string &path, int client_idx); //used in the read callback to accept web sockets

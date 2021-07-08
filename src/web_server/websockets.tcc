@@ -8,11 +8,13 @@ void basic_web_server<T>::websocket_accept_read_cb(const std::string& sec_websoc
   const std::string accept_header_value = get_accept_header_value(sec_websocket_key);
   const auto resp = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + accept_header_value + "\r\n\r\n";
 
+  std::vector<char> send_buffer(resp.size());
+  std::memcpy(&send_buffer[0], resp.c_str(), resp.size());
+  tcp_server->write_connection(client_idx, std::move(send_buffer));
+
   int ws_client_idx = new_ws_client(client_idx); //sets this index up as a new client
   tcp_clients[client_idx].ws_client_idx = ws_client_idx;
   auto ws_client_id = websocket_clients[ws_client_idx].id;
-
-  // post_message_to_program(message_type::new_radio_client, );
 
   std::vector<std::string> subdirs{};
 
@@ -26,14 +28,13 @@ void basic_web_server<T>::websocket_accept_read_cb(const std::string& sec_websoc
   }
   free(path_dup_original);
 
-  std::vector<char> send_buffer(resp.size());
-  std::memcpy(&send_buffer[0], resp.c_str(), resp.size());
-
-  if(subdirs.size() == 2 && subdirs[0] == "radio"){ // we don't keep a record of valid stations on this thread, ask the central thread
-    post_new_radio_client_to_program(subdirs[1], ws_client_idx, ws_client_id);
+  // we only accept radio connections via websocket in this case
+  if(subdirs.size() == 3 && subdirs[0] == "radio"){ // we don't keep a record of valid stations on this thread, ask the central thread
+    post_new_radio_client_to_program(subdirs[1] + "/" + subdirs[2], ws_client_idx, ws_client_id);
+  }else{
+    close_ws_connection_req(ws_client_idx);
   }
   
-  tcp_server->write_connection(client_idx, std::move(send_buffer));
 }
 
 template<server_type T>
@@ -213,6 +214,10 @@ std::vector<char> basic_web_server<T>::make_ws_frame(const std::string &packet_m
 template<server_type T>
 bool basic_web_server<T>::close_ws_connection_req(int ws_client_idx, bool client_already_closed){
   auto &client_data = websocket_clients[ws_client_idx];
+
+  for(auto &set : broadcast_ws_clients_tcp_client_idxs) // erase the client from any subscriptions
+    set.erase(client_data.client_idx);
+
   client_data.currently_writing++;
   active_websocket_connections_client_idxs.erase(client_data.client_idx); // considered closed to outside observers now
   client_data.websocket_frames = {};

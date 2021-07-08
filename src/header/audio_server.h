@@ -132,9 +132,10 @@ class audio_server {
 
   static int max_id;
 
+  static int active_instances;
+
   std::thread audio_thread{};
   void run(); // run the audio server
-  void wait_for_clean_exit();
 public:
   audio_server(std::string dir_path, std::string audio_server_name);
   int id = -1;
@@ -183,7 +184,7 @@ public:
 
   ~audio_server(){ // this will be called as soon as it goes out of scope, unlike the web
     kill_server();
-    wait_for_clean_exit();
+    audio_thread.join(); // join its own audio thread
   }
 };
 

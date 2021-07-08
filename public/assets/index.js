@@ -105,7 +105,7 @@ async function playMusic(typedArrayCurrent){ //takes 1 packet of audio, decode, 
 }
 
 function playAudio(){
-  const ws = new WebSocket("wss://radio.erewhon.xyz/ws/radio/test_server")
+  const ws = new WebSocket("wss://radio.erewhon.xyz/ws/radio/test2_server/full_broadcast")
   ws.onmessage = msg => {
     audio_data = JSON.parse(msg.data)
     for(const page of audio_data.pages){

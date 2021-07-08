@@ -4,6 +4,9 @@
 using namespace web_server;
 
 template<server_type T>
+bool basic_web_server<T>::instance_exists = false;
+
+template<server_type T>
 bool basic_web_server<T>::get_process(std::string &path, bool accept_bytes, const std::string& sec_websocket_key, int client_idx){
   char *path_temp = strdup(path.c_str());
   
@@ -149,6 +152,9 @@ void basic_web_server<T>::kill_client(int client_idx){ // be wary of this, I don
 
   int ws_client_idx = tcp_clients[client_idx].ws_client_idx;
   all_websocket_connections.erase(ws_client_idx); //connection definitely closed now
+
+  for(auto &set : broadcast_ws_clients_tcp_client_idxs)
+    set.erase(client_idx);
   
   if(active_websocket_connections_client_idxs.count(ws_client_idx)){
     active_websocket_connections_client_idxs.erase(client_idx);

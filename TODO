@@ -1,2 +1,5 @@
-- Add sets of websocket clients on each thread subscribed to a particular endpoint
-- Have 2 different types of broadcast, full broadcast (audio + music info) and partial (just music info)
+- Fix endpoint stuff
+- Fix closing it on incorrect endpoint
+- Add in being able to request by talking to an endpoint
+- Add in listing all audio by asking an endpoint
+- Add in broadcasting info in full_data and metadata_only endpoints

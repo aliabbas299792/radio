@@ -10,12 +10,18 @@ using json = nlohmann::json;
 std::vector<audio_server*> audio_server::audio_servers{};
 int audio_server::max_id = 0;
 std::unordered_map<std::string, int> audio_server::server_id_map{};
+int audio_server::active_instances = 0;
 
 audio_server::audio_server(std::string dir_path, std::string name){ // not thread safe
+  if(web_server::basic_web_server<server_type::TLS>::instance_exists || web_server::basic_web_server<server_type::NON_TLS>::instance_exists)
+    utility::fatal_error("Audio servers must be initialised before web servers\n"); // self explanatory
+
   audio_server_name = utility::to_web_name(name); // only uses the web safe name
   id = max_id++; // (also acts as an index into the vector below)
   audio_servers.push_back(this); // push to static vector
   server_id_map[audio_server_name] = id;
+
+  active_instances++; // used for shutdown
 
   dir_path = (dir_path.find_last_of("/") == dir_path.size() - 1) ? dir_path : dir_path + "/"; // ensures there's a slash at the end
   this->dir_path = dir_path;
@@ -92,14 +98,13 @@ void audio_server::run(){
       break;
     
     auto *req = reinterpret_cast<audio_req*>(cqe->user_data);
-
     switch(req->event){
       case audio_events::AUDIO_REQUEST_FROM_PROGRAM:
         // req->data.audio_request_from_program_filepath;
         break;
       case audio_events::FILE_READY: {
         auto file_ready_data = get_from_file_transfer_queue();
-        std::cout << "FILE IS READY woohoo " << file_ready_data.filepath << "\n";
+        std::cout << "File loaded: " << file_ready_data.filepath << "\n";
         process_audio(std::move(file_ready_data));
         
         fd_read_req(file_ready_fd, audio_events::FILE_READY);
@@ -135,8 +140,6 @@ void audio_server::run(){
           }
 
           std::string file_name_str = std::string(original_file_name);
-
-          std::cout <<file_name_str << "\n";
 
           if(data->mask & IN_CREATE){
             slash_separated_audio_list += "/" + file_name_str;
@@ -373,11 +376,6 @@ void audio_server::fd_read_req(int fd, audio_events event, size_t size){
 
 void audio_server::kill_server(){
   eventfd_write(kill_efd, 1); // kill the server
-}
-
-void audio_server::wait_for_clean_exit(){
-  for(auto server : audio_servers)
-    server->audio_thread.join();
 }
 
 void audio_server::send_file_request_to_program(const std::string &path){

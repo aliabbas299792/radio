@@ -1,5 +1,3 @@
-- Fix endpoint stuff
-- Fix closing it on incorrect endpoint
 - Add in being able to request by talking to an endpoint
 - Add in listing all audio by asking an endpoint
 - Add in broadcasting info in full_data and metadata_only endpoints

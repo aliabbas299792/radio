@@ -221,8 +221,6 @@ void audio_server::broadcast_routine(){
 
     current_playback_time += std::chrono::milliseconds(chunk.duration); // increase it with each broadcast
 
-    std::cout << "this is how far ahead playback is: " << std::chrono::duration_cast<std::chrono::milliseconds>(current_playback_time - std::chrono::system_clock::now()).count() << "\n";
-    std::cout << "\tthis is the last chunk duration: " << chunk.duration << "\n";
     broadcast_to_central_server(data_chunk.dump());
   }
 }

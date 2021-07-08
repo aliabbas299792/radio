@@ -45,7 +45,7 @@ static struct {
   std::array<float, 4> celtOnly{2.5, 5, 10, 20};
 } audio_frame_durations;
 
-constexpr int BROADCAST_INTERVAL_MS = 1000;
+constexpr int BROADCAST_INTERVAL_MS = 3000; // high enough to allow for the system to queue new audio
 
 struct audio_req {
   audio_events event{};

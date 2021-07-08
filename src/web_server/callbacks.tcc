@@ -44,15 +44,11 @@ void event_cb(tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the ev
 
       int broadcast_channel_id = data.additional_info; // broadcast_channel_id is stored in additional_info
 
-      std::cout << broadcast_channel_id << " is the channel id\n";
-
       auto broadcast_data = web_server->get_broadcast_set_data(broadcast_channel_id);
 
       if(broadcast_data.size > 0){
         // final item is the number of clients that will broadcast this
         data_vec[data.item_idx] = {data.buff_ptr, data.length, int64_t(client_idxs.size())}; // casting this, since need -1 as a value, but this shouldn't be an issue since hopefully we don't get close to the limit of int64
-
-        std::cout << broadcast_data.size << " is num clients here\n";
 
         tcp_server->broadcast_message(broadcast_data.begin, broadcast_data.end, broadcast_data.size, data.buff_ptr, data.length, data.item_idx);
       }else{
@@ -64,17 +60,22 @@ void event_cb(tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the ev
       int tcp_client_idx = -1;
       if((tcp_client_idx = web_server->get_ws_client_tcp_client_idx(data.item_idx, data.additional_info)) != -1){ // ws_client_idx, ws_client_id respectively
         // both are needed to do a simple check to make sure it's the right connection
-        if(data.additional_info != -1){
+        auto broadcast_channel_id = reinterpret_cast<int64_t>(data.buff_ptr); // in this case we are storing the broadcast_channel_id in place of the unused buff_ptr
+        if(broadcast_channel_id != -1){
           // send data to this client
           tcp_server->write_connection(tcp_client_idx, std::move(data.buff));
 
-          std::cout << data.additional_info << " is the broadcast_channel_id\n";
+          std::cout << broadcast_channel_id << " is the broadcast_channel_id\n";
           
-          web_server->subscribe_client(data.additional_info, tcp_client_idx); // the client is now subscribed to this channel
+          web_server->subscribe_client(broadcast_channel_id, tcp_client_idx); // the client is now subscribed to this channel
           break;
         }
       }
       // otherwise close the connection
+      std::cout << "closeE: " << data.additional_info << "\n";
+      std::cout << "close0: " << data.item_idx << "\n";
+      std::cout << "close1: " << tcp_client_idx << "\n";
+      std::cout << "close2: " << web_server->tcp_clients[tcp_client_idx].ws_client_idx << "\n";
       web_server->close_ws_connection_req(web_server->tcp_clients[tcp_client_idx].ws_client_idx);
       break;
     }

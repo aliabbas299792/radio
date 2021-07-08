@@ -190,7 +190,7 @@ namespace web_server{
       data.msg_type = message_type::new_radio_client_response;
       data.item_idx = ws_client_idx;
       data.additional_info = ws_client_id;
-      data.additional_info = broadcast_channel_id;
+      data.buff_ptr = reinterpret_cast<const char*>(broadcast_channel_id); // we are storing the broadcast_channel_id in the pointer place becasue we need to, think of it as 'pointing' to the correct broadcast channel
       data.buff = std::move(buff);
       to_server_queue.enqueue(std::move(data));
       tcp_server->notify_event();

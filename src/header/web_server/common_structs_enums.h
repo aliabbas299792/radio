@@ -25,7 +25,13 @@ namespace web_server {
     websocket_broadcast,
     broadcast_finished,
     new_radio_client,
-    new_radio_client_response
+    new_radio_client_response,
+    request_audio_list,
+    request_audio_list_response,
+    request_audio,
+    request_audio_response,
+    request_station_list,
+    request_station_list_response
   };
 
   struct tcp_client {

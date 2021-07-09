@@ -20,6 +20,11 @@ bool basic_web_server<T>::get_process(std::string &path, bool accept_bytes, cons
     websocket_accept_read_cb(sec_websocket_key, path.substr(2), client_idx);
     return true;
   }
+
+  if(subdir == "station_list"){
+    post_server_list_request_to_program(client_idx);
+    return true;
+  }
   
   if(subdir == "listen"){
     path = "";

@@ -74,6 +74,10 @@ void event_cb(tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the ev
       web_server->close_ws_connection_req(ws_client_idx);
       break;
     }
+    case web_server::message_type::request_station_list_response: {
+      int client_idx = data.item_idx;
+      tcp_server->write_connection(client_idx, std::move(data.buff));
+    }
   }
 }
 

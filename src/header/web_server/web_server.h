@@ -148,6 +148,26 @@ namespace web_server{
       return broadcast_set_data();
     }
 
+    void post_server_list_request_to_program(int client_idx){
+      if(!tcp_server) return; // need this set before posting any messages
+      message_post_data data;
+      data.msg_type = message_type::request_station_list;
+      data.item_idx = client_idx;
+      to_program_queue.enqueue(std::move(data));
+
+      eventfd_write(central_communication_fd, 1); //notify the program thread using our eventfd
+    }
+
+    void post_server_list_response_to_server(int client_idx, std::vector<char> &&str_data){
+      if(!tcp_server) return; // need this set before posting any messages
+      message_post_data data;
+      data.msg_type = message_type::request_station_list_response;
+      data.item_idx = client_idx;
+      data.buff = str_data;
+      to_server_queue.enqueue(std::move(data));
+      tcp_server->notify_event();
+    }
+
     void post_message_to_server_thread(message_type msg_type, const char *buff_ptr, size_t length, int item_idx, uint64_t additional_info = -1){ //called from the program thread, to notify the server thread
       if(!tcp_server) return; // need this set before posting any messages
       message_post_data data;

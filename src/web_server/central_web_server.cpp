@@ -263,6 +263,19 @@ void central_web_server::run(){
             auto data = server.get_from_to_program_queue();
 
             switch(data.msg_type){
+              case web_server::message_type::request_station_list: {
+                std::string response_str = "HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n\r\n{\"stations\": [";
+
+                for(auto &pair : audio_server::server_id_map)
+                  response_str += "\"" + pair.first + "\",";
+                response_str = response_str.substr(0, response_str.size() - 1); // gets rid of the trailing comma
+                response_str += "]}";
+
+                std::vector<char> response{response_str.begin(), response_str.end()};
+
+                server.post_server_list_response_to_server(data.item_idx, std::move(response));
+                break;
+              }
               case web_server::message_type::broadcast_finished:
                 store.free_item(data.item_idx);
                 break;

@@ -35,48 +35,43 @@ void event_cb(tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the ev
   auto data = web_server->get_from_to_server_queue();
   switch(data.msg_type){
     case web_server::message_type::websocket_broadcast: {
-      if(!client_idxs.size()) // only even process this bit once someone has connected
-        break;
+      if(client_idxs.size()) {// only even process this bit once someone has connected
+        auto &data_vec = web_server->broadcast_data;
+        if(data_vec.size() <= data.item_idx)
+          data_vec.resize(data.item_idx+1); // item_idx corresponds directly to the index
 
-      auto &data_vec = web_server->broadcast_data;
-      if(data_vec.size() <= data.item_idx)
-        data_vec.resize(data.item_idx+1); // item_idx corresponds directly to the index
+        int broadcast_channel_id = data.additional_info; // broadcast_channel_id is stored in additional_info
 
-      int broadcast_channel_id = data.additional_info; // broadcast_channel_id is stored in additional_info
+        auto broadcast_clients_data = web_server->get_broadcast_set_data(broadcast_channel_id);
 
-      auto broadcast_data = web_server->get_broadcast_set_data(broadcast_channel_id);
-
-      if(broadcast_data.size > 0){
-        // final item is the number of clients that will broadcast this
-        data_vec[data.item_idx] = {data.buff_ptr, data.length, int64_t(client_idxs.size())}; // casting this, since need -1 as a value, but this shouldn't be an issue since hopefully we don't get close to the limit of int64
-
-        tcp_server->broadcast_message(broadcast_data.begin, broadcast_data.end, broadcast_data.size, data.buff_ptr, data.length, data.item_idx);
-      }else{
-        web_server->post_memory_release_message_to_program(web_server::message_type::broadcast_finished, data.buff_ptr, data.length, data.item_idx);
+        if(broadcast_clients_data.size > 0){
+          // final item is the number of clients that will broadcast this
+          data_vec[data.item_idx] = {data.buff_ptr, data.length, int64_t(broadcast_clients_data.size)}; // casting this, since need -1 as a value, but this shouldn't be an issue since hopefully we don't get close to the limit of int64
+          tcp_server->broadcast_message(broadcast_clients_data.begin, broadcast_clients_data.end, broadcast_clients_data.size, data.buff_ptr, data.length, data.item_idx);
+          break;
+        }
       }
+      web_server->post_memory_release_message_to_program(web_server::message_type::broadcast_finished, data.buff_ptr, data.length, data.item_idx);
       break;
     }
     case web_server::message_type::new_radio_client_response: {
       int tcp_client_idx = -1;
+      
       if((tcp_client_idx = web_server->get_ws_client_tcp_client_idx(data.item_idx, data.additional_info)) != -1){ // ws_client_idx, ws_client_id respectively
         // both are needed to do a simple check to make sure it's the right connection
         auto broadcast_channel_id = reinterpret_cast<int64_t>(data.buff_ptr); // in this case we are storing the broadcast_channel_id in place of the unused buff_ptr
-        if(broadcast_channel_id != -1){
+        if(broadcast_channel_id != -1){ // in the case they subscribed to the correct channel
           // send data to this client
           tcp_server->write_connection(tcp_client_idx, std::move(data.buff));
-
-          std::cout << broadcast_channel_id << " is the broadcast_channel_id\n";
           
           web_server->subscribe_client(broadcast_channel_id, tcp_client_idx); // the client is now subscribed to this channel
           break;
         }
       }
       // otherwise close the connection
-      std::cout << "closeE: " << data.additional_info << "\n";
-      std::cout << "close0: " << data.item_idx << "\n";
-      std::cout << "close1: " << tcp_client_idx << "\n";
-      std::cout << "close2: " << web_server->tcp_clients[tcp_client_idx].ws_client_idx << "\n";
-      web_server->close_ws_connection_req(web_server->tcp_clients[tcp_client_idx].ws_client_idx);
+      auto ws_client_idx = web_server->tcp_clients[tcp_client_idx].ws_client_idx;
+      web_server->websocket_write(ws_client_idx, web_server->make_ws_frame("INVALID_STATION", web_server::websocket_non_control_opcodes::text_frame));
+      web_server->close_ws_connection_req(ws_client_idx);
       break;
     }
   }

@@ -1,7 +1,12 @@
 const button = document.getElementById('button');
+const playing_track = document.getElementById('playing');
+const station = window.location.pathname.indexOf("/listen/") == 0 ? window.location.pathname.replace("/listen/", "") : "test";
 let context = new AudioContext();
 let currentTime = 0;
 let typedArrayPrevious = new Uint8Array();
+let currentAudio = "";
+
+const metadata_ws = new WebSocket(`wss://radio.erewhon.xyz/ws/radio/${station}/metadata_only`)
 
 function playPCM(arrayBuffer){ //plays interleaved linear PCM with 16 bit, bit depth
   const int32array = new Int32Array(arrayBuffer);
@@ -104,9 +109,24 @@ async function playMusic(typedArrayCurrent){ //takes 1 packet of audio, decode, 
   }
 }
 
+function update_playing(text){
+  if(playing_track.innerHTML != text)
+    playing_track.innerHTML = text;
+}
+
 function playAudio(){
-  const ws = new WebSocket("wss://radio.erewhon.xyz/ws/radio/test2_server/full_broadcast")
+  metadata_ws.close()
+  const ws = new WebSocket(`wss://radio.erewhon.xyz/ws/radio/${station}/full_broadcast`)
   ws.onmessage = msg => {
+    if(msg.data == "INVALID_ENDPOINT" || msg.data == "INVALID_STATION"){
+      if(msg.data == "INVALID_STATION"){
+        alert("Invalid station selected!");
+      }else if(msg.data == "INVALID_ENDPOINT"){
+        alert("Invalid websocket endpoint!");
+      }
+      return;
+    }
+
     audio_data = JSON.parse(msg.data)
     for(const page of audio_data.pages){
       arr = new Uint8Array(page.buff)
@@ -115,3 +135,19 @@ function playAudio(){
   }
   button.innerText = "Playing...";
 }
+
+window.addEventListener("load", () => {
+  metadata_ws.onmessage = msg => {
+    if(msg.data == "INVALID_ENDPOINT" || msg.data == "INVALID_STATION"){
+      if(msg.data == "INVALID_STATION"){
+        alert("Invalid station selected!");
+      }else if(msg.data == "INVALID_ENDPOINT"){
+        alert("Invalid websocket endpoint!");
+      }
+      return;
+    }
+
+    audio_metadata = JSON.parse(msg.data)
+    update_playing(audio_metadata.title);
+  }
+})

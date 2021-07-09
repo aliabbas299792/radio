@@ -32,6 +32,7 @@ void basic_web_server<T>::websocket_accept_read_cb(const std::string& sec_websoc
   if(subdirs.size() == 3 && subdirs[0] == "radio"){ // we don't keep a record of valid stations on this thread, ask the central thread
     post_new_radio_client_to_program(subdirs[1] + "/" + subdirs[2], ws_client_idx, ws_client_id);
   }else{
+    websocket_write(ws_client_idx, make_ws_frame("INVALID_ENDPOINT", websocket_non_control_opcodes::text_frame));
     close_ws_connection_req(ws_client_idx);
   }
   
@@ -217,8 +218,6 @@ bool basic_web_server<T>::close_ws_connection_req(int ws_client_idx, bool client
 
   for(auto &set : broadcast_ws_clients_tcp_client_idxs) // erase the client from any subscriptions
     set.erase(client_data.client_idx);
-
-  std::cout << "close3: " << client_data.client_idx << "\n";
 
   client_data.currently_writing++;
   active_websocket_connections_client_idxs.erase(client_data.client_idx); // considered closed to outside observers now

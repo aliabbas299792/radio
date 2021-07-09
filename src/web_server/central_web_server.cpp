@@ -5,7 +5,8 @@
 
 #include <sys/timerfd.h>
 
-std::unordered_map<std::string, std::string> central_web_server::config_data_map{};
+std::unordered_map<std::string, std::string> central_web_server::config_data_map{}; // config options
+std::chrono::system_clock::time_point time_start = std::chrono::system_clock::now(); // global start time
 
 template<>
 void central_web_server::thread_server_runner(web_server::tls_web_server &basic_web_server){
@@ -198,10 +199,10 @@ void central_web_server::run(){
 
 
   // audio server, automatically registers with the eventfds - assumption is that this setup takes place before server threads are setup
-  audio_server test_audio_server("public/assets/audio/", "Test Server");
+  audio_server test_audio_server("public/assets/audio/", "Test");
   audio_server_initialise_reads(test_audio_server);
 
-  audio_server test2_audio_server("public/assets/audio2/", "Test2 Server");
+  audio_server test2_audio_server("public/assets/audio2/", "Test2");
   audio_server_initialise_reads(test2_audio_server);
 
 
@@ -211,8 +212,7 @@ void central_web_server::run(){
   int idx = 0;
   for(auto &thread_data : thread_data_container){
     // custom info is the idx of the server in the vector
-    add_event_read_req(thread_data.server.memory_release_fd, central_web_server_event::SERVER_THREAD_COMMUNICATION, idx); // add read for all thread events
-    add_event_read_req(thread_data.server.new_radio_client_fd, central_web_server_event::SERVER_THREAD_COMMUNICATION, idx); // add read for all thread events
+    add_event_read_req(thread_data.server.central_communication_fd, central_web_server_event::SERVER_THREAD_COMMUNICATION, idx); // add read for all thread events
     idx++;
   }
 
@@ -254,49 +254,58 @@ void central_web_server::run(){
         break;
       }
       case central_web_server_event::SERVER_THREAD_COMMUNICATION: {
+        add_event_read_req(req->fd, central_web_server_event::SERVER_THREAD_COMMUNICATION, req->custom_info); // rearm the eventfd
         if(req->custom_info != -1){ // then the idx is set as custom_info in the add_event_read_req call above
-          auto &server = thread_data_container[req->custom_info].server;
-          auto data = server.get_from_to_program_queue();
-          switch(data.msg_type){
-            case web_server::message_type::broadcast_finished:
-              store.free_item(data.item_idx);
-              break;
-            case web_server::message_type::new_radio_client:
-              std::vector<char> response_data_first{};
-              std::vector<char> response_data_second{};
+          auto efd_count = *reinterpret_cast<uint64_t*>(req->buff.data()); // we only write a value of 1 to the efd, so if greater than 1, multiple items in queue
+          
+          while(efd_count--){ // possibly deal with multiple items in the queue
+            auto &server = thread_data_container[req->custom_info].server;
+            auto data = server.get_from_to_program_queue();
 
-              char *saveptr{};
-              char *temp_str = strdup(data.additional_str.c_str()); // expecting something like "test_server/endpoint"
-              std::string station_name = strtok_r(temp_str, "/", &saveptr);
-              std::string connection_type = strtok_r(nullptr, "", &saveptr); // so either full_broadcast or metadata_only in this case
-              free(temp_str);
+            switch(data.msg_type){
+              case web_server::message_type::broadcast_finished:
+                store.free_item(data.item_idx);
+                break;
+              case web_server::message_type::new_radio_client:
+                std::vector<char> response_data_first{};
+                std::vector<char> response_data_second{};
 
-              // broadcast_channel_id = server_id*2 for connection_type == "full_broadcast"
-              // broadcast_channel_id = server_id*2 + 1 for connection_type == "metadata_only"
-              int broadcast_channel_id = -1; // the default, used to indicate the connectio should be closed
+                char *saveptr{};
+                char *temp_str = strdup(data.additional_str.c_str()); // expecting something like "test_server/endpoint"
+                std::string station_name = strtok_r(temp_str, "/", &saveptr);
+                std::string connection_type = strtok_r(nullptr, "", &saveptr); // so either full_broadcast or metadata_only in this case
+                free(temp_str);
 
-              if(audio_server::server_id_map.count(station_name) && ( connection_type == "full_broadcast" || connection_type == "metadata_only" )){ // so must be a valid station and connection_type
-                // send the latest cached data for this specific server to this user, data.item_idx is the ws_client_idx and data.additional_info is the ws_client_id
-                auto server_id = audio_server::server_id_map[station_name];
-                
-                broadcast_channel_id = server_id * 2; // the server ID
+                // broadcast_channel_id = server_id*2 for connection_type == "full_broadcast"
+                // broadcast_channel_id = server_id*2 + 1 for connection_type == "metadata_only"
+                int broadcast_channel_id = -1; // the default, used to indicate the connectio should be closed
 
-                audio_server *inst = audio_server::instance(server_id);
-                response_data_first = inst->main_thread_state.second_last_broadcast_data; // since this would be the 2nd last item, so send it first
-                response_data_second = inst->main_thread_state.last_broadcast_data; // and this would be the last item, so send it after that
+                if(audio_server::server_id_map.count(station_name) && ( connection_type == "full_broadcast" || connection_type == "metadata_only" )){ // so must be a valid station and connection_type
+                  // send the latest cached data for this specific server to this user, data.item_idx is the ws_client_idx and data.additional_info is the ws_client_id
+                  auto server_id = audio_server::server_id_map[station_name];
+                  
+                  broadcast_channel_id = server_id * 2; // the server ID
 
-                if(connection_type == "metadata_only")
-                  broadcast_channel_id += 1;
-              }
+                  audio_server *inst = audio_server::instance(server_id);
 
-              server.post_new_radio_client_response_to_server(data.item_idx, data.additional_info, std::move(response_data_first), broadcast_channel_id);
+                  if(connection_type == "full_broadcast"){
+                    response_data_first = inst->main_thread_state.second_last_broadcast_full_data; // since this would be the 2nd last item, so send it first
+                    response_data_second = inst->main_thread_state.last_broadcast_full_data; // and this would be the last item, so send it after that
+                  }else if(connection_type == "metadata_only"){
+                    response_data_first = inst->main_thread_state.second_last_broadcast_metadata_only; // since this would be the 2nd last item, so send it first
+                    response_data_second = inst->main_thread_state.last_broadcast_metadata_only; // and this would be the last item, so send it after that
+                    broadcast_channel_id += 1; // since broadcast channel is server_id*2 + 1
+                  }
+                }
 
-              if(broadcast_channel_id != -1)
-                server.post_new_radio_client_response_to_server(data.item_idx, data.additional_info, std::move(response_data_second), broadcast_channel_id);
-              break;
+                server.post_new_radio_client_response_to_server(data.item_idx, data.additional_info, std::move(response_data_first), broadcast_channel_id);
+
+                if(broadcast_channel_id != -1)
+                  server.post_new_radio_client_response_to_server(data.item_idx, data.additional_info, std::move(response_data_second), broadcast_channel_id);
+                break;
+            }
           }
         }
-        add_event_read_req(req->fd, central_web_server_event::SERVER_THREAD_COMMUNICATION, req->custom_info); // rearm the eventfd
         break;
       }
       case central_web_server_event::READ:
@@ -315,6 +324,7 @@ void central_web_server::run(){
         }
         break;
       case central_web_server_event::AUDIO_SERVER_COMMUNICATION: {
+        add_event_read_req(req->fd, central_web_server_event::AUDIO_SERVER_COMMUNICATION, req->custom_info); // the eventfd is in req->fd
         audio_server_event_req_handler<T>(req->fd, req->custom_info, thread_data_container); // the audio server ID is stored in req->custom_info
         break;
       }
@@ -380,20 +390,48 @@ void central_web_server::audio_server_event_req_handler(int eventfd, int server_
     server->main_thread_state.fd_to_filepath[fd] = data.filepath;
     add_read_req(fd, size, server_id); // add a read request for this file, setting the server_id correctly - need it to locate the server
   }else if(eventfd == server->broadcast_fd){
-    auto data = server->get_broadcast_audio();
+    //
+    // full data broadcast
+    //
+    auto data = server->get_broadcast_data();
     auto &main_thread_state = server->main_thread_state;
 
-    auto ws_data = make_ws_frame(data, web_server::websocket_non_control_opcodes::text_frame);
-    main_thread_state.second_last_broadcast_data = main_thread_state.last_broadcast_data;
-    main_thread_state.last_broadcast_data = ws_data;
+    auto ws_full_data = make_ws_frame(data.full_data, web_server::websocket_non_control_opcodes::text_frame);
+    main_thread_state.second_last_broadcast_full_data = main_thread_state.last_broadcast_full_data;
+    main_thread_state.last_broadcast_full_data = ws_full_data;
 
-    auto item_data = store.insert_item(std::move(ws_data), num_threads);
+    auto item_full_data = store.insert_item(std::move(ws_full_data), num_threads);
 
     // as mentioned above, broadcast_channel_id == server_id*2 when the subscribed endpoint is full_broadcast, so we just send the server_id
     for(server_data<T> &thread_data : thread_data_container)
-      thread_data.server.post_message_to_server_thread(web_server::message_type::websocket_broadcast, reinterpret_cast<const char*>(item_data.buffer.ptr), item_data.buffer.size, item_data.idx, server_id*2);
+      thread_data.server.post_message_to_server_thread(
+        web_server::message_type::websocket_broadcast, 
+        reinterpret_cast<const char*>(item_full_data.buffer.ptr),
+        item_full_data.buffer.size,
+        item_full_data.idx,
+        server_id*2
+      );
+    
+    
+    //
+    // metadata only broadcast
+    //
+    auto ws_metadata_only = make_ws_frame(data.metdata_only, web_server::websocket_non_control_opcodes::text_frame);
+    main_thread_state.second_last_broadcast_metadata_only = main_thread_state.last_broadcast_metadata_only;
+    main_thread_state.last_broadcast_metadata_only = ws_metadata_only;
+
+    auto item_metadata_only = store.insert_item(std::move(ws_metadata_only), num_threads);
+
+    // as mentioned above, broadcast_channel_id == server_id*2+1 when the subscribed endpoint is metadata_only, so we just send the server_id
+    for(server_data<T> &thread_data : thread_data_container)
+      thread_data.server.post_message_to_server_thread(
+        web_server::message_type::websocket_broadcast, 
+        reinterpret_cast<const char*>(item_metadata_only.buffer.ptr),
+        item_metadata_only.buffer.size,
+        item_metadata_only.idx,
+        server_id*2+1
+      );
   }
-  add_event_read_req(eventfd, central_web_server_event::AUDIO_SERVER_COMMUNICATION, server_id);
 }
 
 void central_web_server::kill_server(){

@@ -106,7 +106,6 @@ void audio_server::run(){
         auto file_ready_data = get_from_file_transfer_queue();
         std::cout << "File loaded: " << file_ready_data.filepath << "\n";
         process_audio(std::move(file_ready_data));
-        
         fd_read_req(file_ready_fd, audio_events::FILE_READY);
         break;
       }
@@ -118,9 +117,8 @@ void audio_server::run(){
         fd_read_req(send_audio_list, audio_events::AUDIO_LIST);
         break;
       case audio_events::BROADCAST_TIMER:
-        // std::cout << "it a broadcast timer " << utility::random_number(0, audio_list.size()+100) << "\n";
         broadcast_routine();
-        // send_file_request_to_program(dir_path + "audionautix-trippin-coffee.opus");
+
         fd_read_req(timerfd, audio_events::BROADCAST_TIMER);
         break;
       case audio_events::INOTIFY_DIR_CHANGED:
@@ -172,8 +170,8 @@ void audio_server::run(){
   io_uring_queue_exit(&ring);
 }
 
-std::string audio_server::get_broadcast_audio(){
-  std::string output{};
+combined_data_chunk audio_server::get_broadcast_data(){
+  combined_data_chunk output{};
   broadcast_queue.try_dequeue(output);
   return output;
 }
@@ -183,9 +181,9 @@ void audio_server::broadcast_routine(){
     // if there are less than BROADCAST_INTERVAL_MS long till the end of this file, and nothing is currently being
     currently_processing_audio = get_requested_audio();
     if(currently_processing_audio == ""){ // if there was nothing in the requested queue
-      if(audio_list.size() == 10)
+      if(audio_list.size() == 0)
         utility::fatal_error("There are no opus files in the audio directory " + dir_path);
-      if(audio_list.size() < 2)
+      if(audio_list.size() < 10)
         currently_processing_audio = audio_list[utility::random_number(0, audio_list.size()-1)]; // select a file at random
       else{
         // a very rough way of making sure you don't get repeats too often - probably won't get stuck for a long time, not likely
@@ -221,15 +219,20 @@ void audio_server::broadcast_routine(){
     json data_chunk{};
     data_chunk["duration"] = chunk.duration;
     data_chunk["pages"] = data_pages;
+    data_chunk["title"] = chunk.title;
 
     current_playback_time += std::chrono::milliseconds(chunk.duration); // increase it with each broadcast
+    
+    json metadata_only_chunk{};
+    metadata_only_chunk["duration"] = chunk.duration;
+    metadata_only_chunk["title"] = chunk.title;
 
-    broadcast_to_central_server(data_chunk.dump());
+    broadcast_to_central_server(data_chunk.dump(), metadata_only_chunk.dump());
   }
 }
 
-void audio_server::broadcast_to_central_server(std::string &&data){
-  broadcast_queue.emplace(data);
+void audio_server::broadcast_to_central_server(std::string &&full_data, std::string &&metadata_only){
+  broadcast_queue.emplace(std::move(full_data), std::move(metadata_only));
   eventfd_write(broadcast_fd, 1);
 }
 
@@ -312,6 +315,18 @@ void audio_server::process_audio(file_transfer_data &&data){
   auto audio_data = get_audio_page_data(std::move(data.data));
 
   int audio_data_idx = 0;
+  
+  std::string filename = "";
+  char *save_ptr{};
+  char *path_dup = strdup(data.filepath.c_str());
+  char *path_dup_original = path_dup;
+  char *path_part{};
+  while((path_part = strtok_r(path_dup, "/", &save_ptr)) != nullptr){
+    path_dup = nullptr;
+    filename = path_part;
+  }
+  free(path_dup_original);
+  filename = filename.substr(0, filename.size() - 5); // we know the extension is .opus, so we remove the last 5 characters
 
   bool is_chunks_of_audio_empty = chunks_of_audio.size() == 0;
 
@@ -321,6 +336,7 @@ void audio_server::process_audio(file_transfer_data &&data){
 
   while(audio_data_idx < audio_data.size()){
     audio_chunk chunk{};
+    chunk.title = filename; // set the title
     while(chunk.insert_data(std::move(audio_data[audio_data_idx++]))){ // fill the chunk up as much as possible
       if(audio_data_idx == audio_data.size()) break; // don't want to segfault by overstepping the boundaries
     }
@@ -335,7 +351,7 @@ void audio_server::process_audio(file_transfer_data &&data){
       chunks_of_audio.push_back(chunk);
   }
 
-  std::cout << std::floor(float(duration_of_audio)/60000.0) << "m " << std::round((float(duration_of_audio)/60000.0 - std::floor(float(duration_of_audio)/60000.0))*60) << "s is the duration\n";
+  std::cout << "" << std::floor(float(duration_of_audio)/60000.0) << "m " << std::round((float(duration_of_audio)/60000.0 - std::floor(float(duration_of_audio)/60000.0))*60) << "s is the duration\n";
 
   current_audio_finish_time += std::chrono::milliseconds(duration_of_audio);
   currently_processing_audio = ""; // we've processed it
@@ -343,7 +359,7 @@ void audio_server::process_audio(file_transfer_data &&data){
   broadcast_routine();
 
   if(is_chunks_of_audio_empty)
-    broadcast_routine(); // extra broadcast routine if it's right at the start of the application
+    broadcast_routine(); // extra broadcast routine if there is not enough data
 }
 
 void audio_server::respond_with_file_list(){

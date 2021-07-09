@@ -14,6 +14,7 @@
 #include "../../vendor/readerwriterqueue/atomicops.h"
 #include "../../vendor/readerwriterqueue/readerwriterqueue.h"
 
+#include <chrono>
 #include <thread>
 
 #include <openssl/sha.h>
@@ -22,6 +23,8 @@
 using uchar = unsigned char;
 
 using namespace web_cache;
+
+extern std::chrono::system_clock::time_point time_start;
 
 namespace web_server{
   struct receiving_data_info{
@@ -89,9 +92,6 @@ namespace web_server{
     ulong get_ws_frame_length(const char *buffer); //helper function which reads the websocket header to get the length of the message
     std::pair<int, std::vector<char>> decode_websocket_frame(std::vector<char> &&data); //decodes a single full websocket frame
     std::pair<int, std::vector<std::vector<char>>> get_ws_frames(char *buffer, int length, int ws_client_idx); //gets any full websocket frames possible
-
-    //writing data to connections
-    void websocket_write(int ws_client_idx, std::vector<char> &&buff);
     
     //related to opening/closing connections
     std::string get_accept_header_value(std::string input); //gets the appropriate header value from the websocket connection request
@@ -129,8 +129,7 @@ namespace web_server{
     std::vector<tcp_client> tcp_clients{}; //storing additional data related to the client_idxs passed to this layer
 
     //thread stuff
-    int memory_release_fd = eventfd(0, 0);
-    int new_radio_client_fd = eventfd(0, 0);
+    int central_communication_fd = eventfd(0, 0); // set in main thread
     
     std::vector<broadcast_data_items> broadcast_data{}; // data from any broadcasts sent from the program thread
 
@@ -170,7 +169,8 @@ namespace web_server{
       data.item_idx = item_idx;
       data.additional_info = additional_info;
       to_program_queue.enqueue(std::move(data));
-      eventfd_write(memory_release_fd, 1); //notify the program thread using our eventfd
+
+      eventfd_write(central_communication_fd, 1); //notify the program thread using our eventfd
     }
 
     void post_new_radio_client_to_program(std::string station, int ws_client_idx, int ws_client_id){
@@ -181,7 +181,8 @@ namespace web_server{
       data.additional_info = ws_client_id;
       data.additional_str = station;
       to_program_queue.enqueue(std::move(data));
-      eventfd_write(new_radio_client_fd, 1); //notify the program thread using our eventfd
+      
+      eventfd_write(central_communication_fd, 1); //notify the program thread using our eventfd
     }
 
     void post_new_radio_client_response_to_server(int ws_client_idx, int ws_client_id, std::vector<char> &&buff, int broadcast_channel_id = -1){
@@ -233,6 +234,9 @@ namespace web_server{
     void websocket_process_read_cb(int client_idx, char *buffer, int length);
     bool websocket_process_write_cb(int client_idx); //returns whether or not this was used
     void websocket_accept_read_cb(const std::string& sec_websocket_key, const std::string &path, int client_idx); //used in the read callback to accept web sockets
+
+    //writing data to connections
+    void websocket_write(int ws_client_idx, std::vector<char> &&buff);
 
     int get_ws_client_tcp_client_idx(int ws_client_idx, int ws_client_id){
       auto &ws_client = websocket_clients[ws_client_idx];

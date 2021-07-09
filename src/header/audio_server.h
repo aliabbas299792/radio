@@ -80,6 +80,7 @@ struct audio_byte_length_duration {
 
 struct audio_chunk {
   int duration{};
+  std::string title{};
   std::vector<audio_page_data> pages{};
   bool insert_data(audio_page_data &&page){
     if(duration < BROADCAST_INTERVAL_MS){ // less than BROADCAST_INTERVAL_MS
@@ -89,6 +90,13 @@ struct audio_chunk {
     }
     return false;
   }
+};
+
+struct combined_data_chunk {
+  std::string full_data{};
+  std::string metdata_only{};
+  combined_data_chunk(std::string &&full_data, std::string &&metdata_only) : full_data{full_data}, metdata_only{metdata_only} {}
+  combined_data_chunk() {}
 };
 
 class audio_server {
@@ -106,7 +114,7 @@ class audio_server {
   moodycamel::ReaderWriterQueue<audio_file_list_data> audio_file_list_data_queue{};
   moodycamel::ReaderWriterQueue<file_transfer_data> file_transfer_queue{};
   moodycamel::ReaderWriterQueue<std::string> audio_request_queue{};
-  moodycamel::ReaderWriterQueue<std::string> broadcast_queue{};
+  moodycamel::ReaderWriterQueue<combined_data_chunk> broadcast_queue{}; // the full data chunk and the metadata only chunk
 
   std::string audio_server_name{};
   std::string dir_path = "";
@@ -168,8 +176,8 @@ public:
   void send_audio_request_to_audio_server(const std::string &file_name);
   std::string get_requested_audio();
   
-  std::string get_broadcast_audio();
-  void broadcast_to_central_server(std::string &&data);
+  combined_data_chunk get_broadcast_data();
+  void broadcast_to_central_server(std::string &&full_data, std::string &&metadata_only);
   const int broadcast_fd = eventfd(0, 0);
 
   // these are updated via the event loop on the main thread, rather than directly since could cause a data race
@@ -178,8 +186,13 @@ public:
     std::string slash_separated_audio_list{};
     
     std::unordered_map<int, std::string> fd_to_filepath{};
-    std::vector<char> last_broadcast_data{};
-    std::vector<char> second_last_broadcast_data{};
+
+    std::vector<char> last_broadcast_full_data{};
+    std::vector<char> second_last_broadcast_full_data{};
+
+    std::vector<char> last_broadcast_metadata_only{};
+    std::vector<char> second_last_broadcast_metadata_only{};
+    
   } main_thread_state;
 
   ~audio_server(){ // this will be called as soon as it goes out of scope, unlike the web

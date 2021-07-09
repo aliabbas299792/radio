@@ -19,13 +19,17 @@ bool basic_web_server<T>::get_process(std::string &path, bool accept_bytes, cons
   if(subdir == "ws"  && sec_websocket_key != ""){
     websocket_accept_read_cb(sec_websocket_key, path.substr(2), client_idx);
     return true;
-  }else{
-    path = path == "" ? "public/index.html" : "public/"+path;
-    
-    if(send_file_request(client_idx, path, accept_bytes, 200))
-      return true;
-    return false;
   }
+  
+  if(subdir == "listen"){
+    path = "";
+  }
+
+  path = path == "" ? "public/index.html" : "public/"+path;
+  
+  if(send_file_request(client_idx, path, accept_bytes, 200))
+    return true;
+  return false;
 }
 
 template<server_type T>

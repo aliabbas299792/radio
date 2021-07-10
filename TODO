@@ -1,4 +1,12 @@
-- Add in being able to request by talking to an endpoint
-- Add in listing all audio by asking an endpoint
-- Add clock
-- Add time into current track
+- Add in events for requesting audio list, and response for that
+  - Add in GET request handler for the audio list
+  - Add in handlers in callbacks.tcc and central_web_server.cpp for this
+  - Send the list from central_web_server straight to the client
+- Add in events for requesting audio, and the response to that request
+  - Add in GET request handler for this case
+  - Add in handlers in callbacks.tcc and central_web_server.cpp for them
+  - Add in queue system, and duplicate vote preventer
+  - Add in simple UI to request audio track
+- Add in GET endpoints for basic information:
+  - i.e for BROADCAST_INTERVAL_MS and for SERVER_START_TIME
+- Add in timer on JS side which shows uptime of the server

@@ -286,14 +286,14 @@ void central_web_server::run(){
                 char *saveptr{};
                 char *temp_str = strdup(data.additional_str.c_str()); // expecting something like "test_server/endpoint"
                 std::string station_name = strtok_r(temp_str, "/", &saveptr);
-                std::string connection_type = strtok_r(nullptr, "", &saveptr); // so either full_broadcast or metadata_only in this case
+                std::string connection_type = strtok_r(nullptr, "", &saveptr); // so either audio_broadcast or metadata_only in this case
                 free(temp_str);
 
-                // broadcast_channel_id = server_id*2 for connection_type == "full_broadcast"
+                // broadcast_channel_id = server_id*2 for connection_type == "audio_broadcast"
                 // broadcast_channel_id = server_id*2 + 1 for connection_type == "metadata_only"
                 int broadcast_channel_id = -1; // the default, used to indicate the connectio should be closed
 
-                if(audio_server::server_id_map.count(station_name) && ( connection_type == "full_broadcast" || connection_type == "metadata_only" )){ // so must be a valid station and connection_type
+                if(audio_server::server_id_map.count(station_name) && ( connection_type == "audio_broadcast" || connection_type == "metadata_only" )){ // so must be a valid station and connection_type
                   // send the latest cached data for this specific server to this user, data.item_idx is the ws_client_idx and data.additional_info is the ws_client_id
                   auto server_id = audio_server::server_id_map[station_name];
                   
@@ -301,9 +301,9 @@ void central_web_server::run(){
 
                   audio_server *inst = audio_server::instance(server_id);
 
-                  if(connection_type == "full_broadcast"){
-                    response_data_first = inst->main_thread_state.second_last_broadcast_full_data; // since this would be the 2nd last item, so send it first
-                    response_data_second = inst->main_thread_state.last_broadcast_full_data; // and this would be the last item, so send it after that
+                  if(connection_type == "audio_broadcast"){
+                    response_data_first = inst->main_thread_state.second_last_broadcast_audio_data; // since this would be the 2nd last item, so send it first
+                    response_data_second = inst->main_thread_state.last_broadcast_audio_data; // and this would be the last item, so send it after that
                   }else if(connection_type == "metadata_only"){
                     response_data_first = inst->main_thread_state.second_last_broadcast_metadata_only; // since this would be the 2nd last item, so send it first
                     response_data_second = inst->main_thread_state.last_broadcast_metadata_only; // and this would be the last item, so send it after that
@@ -404,24 +404,24 @@ void central_web_server::audio_server_event_req_handler(int eventfd, int server_
     add_read_req(fd, size, server_id); // add a read request for this file, setting the server_id correctly - need it to locate the server
   }else if(eventfd == server->broadcast_fd){
     //
-    // full data broadcast
+    // audio data broadcast
     //
     auto data = server->get_broadcast_data();
     auto &main_thread_state = server->main_thread_state;
 
-    auto ws_full_data = make_ws_frame(data.full_data, web_server::websocket_non_control_opcodes::text_frame);
-    main_thread_state.second_last_broadcast_full_data = main_thread_state.last_broadcast_full_data;
-    main_thread_state.last_broadcast_full_data = ws_full_data;
+    auto ws_audio_data = make_ws_frame(data.audio_data, web_server::websocket_non_control_opcodes::text_frame);
+    main_thread_state.second_last_broadcast_audio_data = main_thread_state.last_broadcast_audio_data;
+    main_thread_state.last_broadcast_audio_data = ws_audio_data;
 
-    auto item_full_data = store.insert_item(std::move(ws_full_data), num_threads);
+    auto item_audio_data = store.insert_item(std::move(ws_audio_data), num_threads);
 
-    // as mentioned above, broadcast_channel_id == server_id*2 when the subscribed endpoint is full_broadcast, so we just send the server_id
+    // as mentioned above, broadcast_channel_id == server_id*2 when the subscribed endpoint is audio_broadcast, so we just send the server_id
     for(server_data<T> &thread_data : thread_data_container)
       thread_data.server.post_message_to_server_thread(
         web_server::message_type::websocket_broadcast, 
-        reinterpret_cast<const char*>(item_full_data.buffer.ptr),
-        item_full_data.buffer.size,
-        item_full_data.idx,
+        reinterpret_cast<const char*>(item_audio_data.buffer.ptr),
+        item_audio_data.buffer.size,
+        item_audio_data.idx,
         server_id*2
       );
     

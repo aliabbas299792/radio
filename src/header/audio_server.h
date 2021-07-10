@@ -68,18 +68,21 @@ struct file_transfer_data {
 
 struct audio_page_data {
   std::vector<char> buff{};
-  size_t duration{};
-  audio_page_data(std::vector<char> &&buff, size_t duration) : duration(duration), buff(std::move(buff)) {}
+  time_t duration{};
+  audio_page_data(std::vector<char> &&buff, time_t duration) : duration(duration), buff(std::move(buff)) {}
 };
 
 struct audio_byte_length_duration {
-  size_t duration{};
+  time_t duration{};
   size_t byte_length{};
-  audio_byte_length_duration(size_t duration = 0, size_t byte_length = 0) : duration(duration), byte_length(byte_length) {}
+  audio_byte_length_duration(time_t duration, size_t byte_length) : duration(duration), byte_length(byte_length) {}
+  audio_byte_length_duration() {}
 };
 
 struct audio_chunk {
   int duration{};
+  time_t start_offset{};
+  time_t total_length{};
   std::string title{};
   std::vector<audio_page_data> pages{};
   bool insert_data(audio_page_data &&page){
@@ -93,9 +96,9 @@ struct audio_chunk {
 };
 
 struct combined_data_chunk {
-  std::string full_data{};
+  std::string audio_data{};
   std::string metdata_only{};
-  combined_data_chunk(std::string &&full_data, std::string &&metdata_only) : full_data{full_data}, metdata_only{metdata_only} {}
+  combined_data_chunk(std::string &&audio_data, std::string &&metdata_only) : audio_data{audio_data}, metdata_only{metdata_only} {}
   combined_data_chunk() {}
 };
 
@@ -114,7 +117,7 @@ class audio_server {
   moodycamel::ReaderWriterQueue<audio_file_list_data> audio_file_list_data_queue{};
   moodycamel::ReaderWriterQueue<file_transfer_data> file_transfer_queue{};
   moodycamel::ReaderWriterQueue<std::string> audio_request_queue{};
-  moodycamel::ReaderWriterQueue<combined_data_chunk> broadcast_queue{}; // the full data chunk and the metadata only chunk
+  moodycamel::ReaderWriterQueue<combined_data_chunk> broadcast_queue{}; // the audio data chunk and the metadata only chunk
 
   std::string audio_server_name{};
   std::string dir_path = "";
@@ -177,7 +180,7 @@ public:
   std::string get_requested_audio();
   
   combined_data_chunk get_broadcast_data();
-  void broadcast_to_central_server(std::string &&full_data, std::string &&metadata_only);
+  void broadcast_to_central_server(std::string &&audio_data, std::string &&metadata_only);
   const int broadcast_fd = eventfd(0, 0);
 
   // these are updated via the event loop on the main thread, rather than directly since could cause a data race
@@ -187,8 +190,8 @@ public:
     
     std::unordered_map<int, std::string> fd_to_filepath{};
 
-    std::vector<char> last_broadcast_full_data{};
-    std::vector<char> second_last_broadcast_full_data{};
+    std::vector<char> last_broadcast_audio_data{};
+    std::vector<char> second_last_broadcast_audio_data{};
 
     std::vector<char> last_broadcast_metadata_only{};
     std::vector<char> second_last_broadcast_metadata_only{};

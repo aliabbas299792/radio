@@ -219,20 +219,20 @@ void audio_server::broadcast_routine(){
     json data_chunk{};
     data_chunk["duration"] = chunk.duration;
     data_chunk["pages"] = data_pages;
-    data_chunk["title"] = chunk.title;
 
     current_playback_time += std::chrono::milliseconds(chunk.duration); // increase it with each broadcast
     
     json metadata_only_chunk{};
     metadata_only_chunk["duration"] = chunk.duration;
     metadata_only_chunk["title"] = chunk.title;
-
+    metadata_only_chunk["start_offset"] = chunk.start_offset;
+    metadata_only_chunk["total_length"] = chunk.total_length;
     broadcast_to_central_server(data_chunk.dump(), metadata_only_chunk.dump());
   }
 }
 
-void audio_server::broadcast_to_central_server(std::string &&full_data, std::string &&metadata_only){
-  broadcast_queue.emplace(std::move(full_data), std::move(metadata_only));
+void audio_server::broadcast_to_central_server(std::string &&audio_data, std::string &&metadata_only){
+  broadcast_queue.emplace(std::move(audio_data), std::move(metadata_only));
   eventfd_write(broadcast_fd, 1);
 }
 
@@ -261,7 +261,7 @@ audio_byte_length_duration audio_server::get_ogg_page_info(char *buff){ // gets 
   uint32_t segments_total_length{};
   uint8_t *segments = reinterpret_cast<uint8_t*>(&buff[27 + segments_table_length]);
 
-  uint64_t length_ms{};
+  time_t length_ms{};
   int16_t last_length_extended_page_segment = -1;
 
   for(int i = 0; i < segments_table_length; i++){
@@ -285,13 +285,13 @@ std::vector<audio_page_data> audio_server::get_audio_page_data(std::vector<char>
 
   int read_head = 0;
   int iter_num = 0;
-  size_t duration = 0;
+  time_t duration = 0;
   while(read_head < buff.size()){
     auto data = get_ogg_page_info(&buff[read_head]);
 
     if(iter_num >= 2){
-      duration += data.duration;
       page_vec.push_back({ std::vector<char>(&buff[read_head], &buff[read_head] + data.byte_length), data.duration });
+      duration += data.duration;
     }else{
       iter_num++;
     }
@@ -334,8 +334,14 @@ void audio_server::process_audio(file_transfer_data &&data){
   for(const auto& page : audio_data)
     duration_of_audio += page.duration;
 
+  int chunk_num = 0;
   while(audio_data_idx < audio_data.size()){
     audio_chunk chunk{};
+    chunk.start_offset = chunk_num * BROADCAST_INTERVAL_MS; // offset will always be a multiple of BROADCAST_INTERVAL_MS
+    chunk_num++;
+
+    chunk.total_length = duration_of_audio;
+
     chunk.title = filename; // set the title
     while(chunk.insert_data(std::move(audio_data[audio_data_idx++]))){ // fill the chunk up as much as possible
       if(audio_data_idx == audio_data.size()) break; // don't want to segfault by overstepping the boundaries

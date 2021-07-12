@@ -67,3 +67,11 @@ html{
   font-size: 130%;
   user-select: none;
 }
+#broadcast_time {
+  position: absolute;
+  padding:30px;
+  color:#fff;
+  font-family: sans-serif;
+  font-size: 130%;
+  user-select: none;
+}

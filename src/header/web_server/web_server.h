@@ -25,6 +25,7 @@ using uchar = unsigned char;
 using namespace web_cache;
 
 extern std::chrono::system_clock::time_point time_start;
+constexpr int BROADCAST_INTERVAL_MS = 3000; // used for audio broadcasts, and any other if necessary, high enough to allow for the system to queue new audio for audio broadcasts
 
 namespace web_server{
   struct receiving_data_info{

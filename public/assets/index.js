@@ -4,7 +4,36 @@ const time = () => Date.now() - page_start_time; // time elapsed since the page 
 const to_presentable_time = ms => {
   if(ms >= 60000)
       return `${Math.floor(ms/60000)}m ${Math.floor((ms/1000)%60)}s`
-  return `${Math.round((ms/1000)%60)}s`
+  return `${Math.floor(ms/1000)}s`
+}
+
+const to_presentable_time_seconds = s => {
+  if(s >= 3600)
+    return `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m ${Math.floor(s%60)}s`
+  if(s >= 60)
+    return `${Math.floor(s/60)}m ${Math.floor(s%60)}s`
+  return `${Math.floor(s)}s`
+}
+
+let broadcast_metadata = undefined;
+fetch("/broadcast_metadata").then(data => data.text()).then(metadata => {
+  broadcast_metadata = Object.fromEntries(metadata.replace(/ /g, "").split("\n").map(item => [item.split(":")[0], Number(item.split(":")[1])]));
+  update_broadcast_time(); // start updating the broadcast time
+})
+
+const time_el = document.getElementById('time');
+const broadcast_time_el = document.getElementById('broadcast_time');
+
+const broadcast_elapsed_time = () => Date.now()/1000 - broadcast_metadata["START_TIME_S"];
+
+function update_time(){
+  time_el.innerHTML = `${to_presentable_time(audio_metadata.time_in_audio())} / ${to_presentable_time(audio_metadata.total_length)}`
+  setTimeout(update_time, 1000);
+}
+
+function update_broadcast_time(){
+  broadcast_time_el.innerHTML = `Running for: ${to_presentable_time_seconds(broadcast_elapsed_time())}`
+  setTimeout(update_broadcast_time, 1000)
 }
 
 const audio_metadata = {
@@ -27,7 +56,6 @@ const player = {
   // elements
   button_el: document.getElementById('button'),
   playing_audio_el: document.getElementById('playing'),
-  time_el: document.getElementById('time'),
   // user facing stuff
   station: (window.location.pathname.indexOf("/listen/") == 0 ? window.location.pathname.replace("/listen/", "") : "test"),
   audio_ws: undefined,
@@ -143,10 +171,12 @@ async function playMusic(typedArrayCurrent){ //takes 1 packet of audio, decode, 
   }
 }
 
-function update_playing(text){
+function update_playing(text, total_length){
   setTimeout(() => {
     if(player.playing_audio_el.innerHTML != "Loading...")
       audio_metadata.relative_start_time = time()
+    
+    audio_metadata.total_length = total_length
     player.playing_audio_el.innerHTML = text;
   }, audio_metadata.time_left_in_audio()) // once this has finished, this is the next title
 }
@@ -184,11 +214,6 @@ function toggleAudio(){
   }
 }
 
-function update_time(){
-  player.time_el.innerHTML = `${to_presentable_time(audio_metadata.time_in_audio())} / ${to_presentable_time(audio_metadata.total_length)}`
-  setTimeout(update_time, 1000);
-}
-
 window.addEventListener("load", () => {
   update_time(); // start time updating from now
   let just_started = true;
@@ -206,11 +231,10 @@ window.addEventListener("load", () => {
     metadata = JSON.parse(msg.data)
 
     if(metadata.start_offset == 0 || just_started) // if the same shows up twice, time isn't reset
-      update_playing(metadata.title);
+      update_playing(metadata.title, metadata.total_length);
 
     audio_metadata.time_ms = metadata.start_offset
     audio_metadata.title = metadata.title
-    audio_metadata.total_length = metadata.total_length
 
     if(just_started){
       just_started = false;

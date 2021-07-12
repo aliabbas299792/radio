@@ -219,6 +219,7 @@ void audio_server::broadcast_routine(){
     json data_chunk{};
     data_chunk["duration"] = chunk.duration;
     data_chunk["pages"] = data_pages;
+    data_chunk["start_offset"] = chunk.start_offset;
 
     current_playback_time += std::chrono::milliseconds(chunk.duration); // increase it with each broadcast
     

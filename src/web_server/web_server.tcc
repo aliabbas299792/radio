@@ -1,5 +1,6 @@
 #pragma once
 #include "../header/web_server/web_server.h"
+#include <chrono>
 
 using namespace web_server;
 
@@ -18,6 +19,13 @@ bool basic_web_server<T>::get_process(std::string &path, bool accept_bytes, cons
 
   if(subdir == "ws"  && sec_websocket_key != ""){
     websocket_accept_read_cb(sec_websocket_key, path.substr(2), client_idx);
+    return true;
+  }
+
+  if(subdir == "broadcast_metadata"){
+    std::string metadata_str = "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\nBROADCAST_INTERVAL_MS: " + std::to_string(BROADCAST_INTERVAL_MS) + "\nSTART_TIME_S: " + std::to_string(std::chrono::time_point_cast<std::chrono::seconds>(time_start).time_since_epoch().count());
+    std::vector<char> metadta{metadata_str.begin(), metadata_str.end()};
+    tcp_server->write_connection(client_idx, std::move(metadta));
     return true;
   }
 

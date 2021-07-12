@@ -2,7 +2,7 @@
 const page_start_time = Date.now();
 const time = () => Date.now() - page_start_time; // time elapsed since the page loaded
 const to_presentable_time = ms => {
-  if(ms > 60000)
+  if(ms >= 60000)
       return `${Math.floor(ms/60000)}m ${Math.floor((ms/1000)%60)}s`
   return `${Math.round((ms/1000)%60)}s`
 }
@@ -18,6 +18,9 @@ const audio_metadata = {
   fraction_complete: function() {
     return Math.min(1, Math.max(0, this.time_in_audio() / audio_metadata.total_length));
   },
+  time_left_in_audio: function() {
+    return this.total_length - this.time_in_audio()
+  }
 };
 
 const player = {
@@ -32,6 +35,7 @@ const player = {
   context: new AudioContext(),
   typed_array_previous: new Uint8Array(),
   current_page_time: 0,
+  gain_node: undefined
 }
 
 function playPCM(arrayBuffer){ //plays interleaved linear PCM with 16 bit, bit depth
@@ -53,9 +57,9 @@ function playPCM(arrayBuffer){ //plays interleaved linear PCM with 16 bit, bit d
   //the +1 used below, and the +1 in the length above fixes the clicking issue - I can only 
   //assume that one sample (if non zero) is distorted if the source stops at that sample
   const floatsL = new Float32Array(int32array.length+1);
-  floatsL.forEach((sample, index) => floatsL[index] = 0 );
+  floatsL.forEach((_, index) => floatsL[index] = 0 );
   const floatsR = new Float32Array(int32array.length+1);
-  floatsR.forEach((sample, index) => floatsR[index] = 0 );
+  floatsR.forEach((_, index) => floatsR[index] = 0 );
 
   for(let i = 0; i < int32array.length; i++){
     const sample = int32array[i];
@@ -86,7 +90,12 @@ function playPCM(arrayBuffer){ //plays interleaved linear PCM with 16 bit, bit d
   source.start(player.current_page_time);
   player.current_page_time += Math.round(buffer.duration*100)/100; //2dp
 
-  source.connect(player.context.destination);
+  if(!player.gain_node)
+    player.gain_node = new GainNode(player.context)
+
+  source.connect(player.gain_node)
+
+  player.gain_node.connect(player.context.destination);
 }
 
 async function playMusic(typedArrayCurrent){ //takes 1 packet of audio, decode, and then plays it
@@ -102,26 +111,26 @@ async function playMusic(typedArrayCurrent){ //takes 1 packet of audio, decode, 
       Module.HEAPU8.set(player.typed_array_previous, allocatedPreviousBufferPtr);
     }
 
-    const lengthOfOutput = Module.ccall( //will retrieve the total length in bytes required to store the decoded output
-      'lengthOfOutput', 
+    const output_len = Module.ccall( //will retrieve the total length in bytes required to store the decoded output
+      'output_len', 
       "number",
       ["number", "number"],
       [allocatedCurrentBufferPtr, typedArrayCurrent.length]
     );
 
-    decodedCurrentBufferPtr = Module._malloc(lengthOfOutput);
+    decodedCurrentBufferPtr = Module._malloc(output_len);
 
     const typedArrayCurrentLength = typedArrayCurrent ? typedArrayCurrent.length : 0;
     const typedArrayPreviousLength = player.typed_array_previous ? player.typed_array_previous.length : 0;
 
     Module.ccall(
-      'decodeOggPage',
+      'decode_page',
       "number",
       ["number", "number", "number", "number", "number"],
       [allocatedCurrentBufferPtr, typedArrayCurrentLength, allocatedPreviousBufferPtr, typedArrayPreviousLength, decodedCurrentBufferPtr]
     );
 
-    const outputArrayBuffer = Module.HEAP8.slice(decodedCurrentBufferPtr, decodedCurrentBufferPtr + lengthOfOutput).buffer;
+    const outputArrayBuffer = Module.HEAP8.slice(decodedCurrentBufferPtr, decodedCurrentBufferPtr + output_len).buffer;
 
     playPCM(outputArrayBuffer); //output array buffer contains decoded audio
   } catch(err) {
@@ -129,7 +138,6 @@ async function playMusic(typedArrayCurrent){ //takes 1 packet of audio, decode, 
   } finally {
     Module._free(allocatedPreviousBufferPtr);
     Module._free(allocatedCurrentBufferPtr);
-    Module._free(allocatedPreviousBufferPtr);
 
     player.typed_array_previous = typedArrayCurrent;
   }
@@ -137,12 +145,10 @@ async function playMusic(typedArrayCurrent){ //takes 1 packet of audio, decode, 
 
 function update_playing(text){
   setTimeout(() => {
-    if(player.playing_audio_el.innerHTML != text){
-      if(player.playing_audio_el.innerHTML != "Loading...")
-        audio_metadata.relative_start_time = time()
-      player.playing_audio_el.innerHTML = text;
-    }
-  }, player.current_page_time*1000 - time())
+    if(player.playing_audio_el.innerHTML != "Loading...")
+      audio_metadata.relative_start_time = time()
+    player.playing_audio_el.innerHTML = text;
+  }, audio_metadata.time_left_in_audio()) // once this has finished, this is the next title
 }
 
 function toggleAudio(){
@@ -152,9 +158,9 @@ function toggleAudio(){
 
     player.audio_ws.close();
     player.context.close();
+    player.gain_node = undefined;
 
     player.audio_ws = undefined;
-    player.typed_array_previous = undefined;
   }else{
     player.context = new AudioContext()
     player.audio_ws = new WebSocket(`wss://radio.erewhon.xyz/ws/radio/${player.station}/audio_broadcast`)
@@ -198,7 +204,9 @@ window.addEventListener("load", () => {
     }
 
     metadata = JSON.parse(msg.data)
-    update_playing(metadata.title);
+
+    if(metadata.start_offset == 0 || just_started) // if the same shows up twice, time isn't reset
+      update_playing(metadata.title);
 
     audio_metadata.time_ms = metadata.start_offset
     audio_metadata.title = metadata.title

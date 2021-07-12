@@ -148,7 +148,6 @@ namespace tcp_tls_server {
   template<server_type T>
   class server_base {
     protected:
-      std::chrono::system_clock::time_point time_last_debug{};
       accept_callback<T> accept_cb = nullptr;
       close_callback<T> close_cb = nullptr;
       read_callback<T> read_cb = nullptr;

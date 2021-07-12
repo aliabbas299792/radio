@@ -183,6 +183,7 @@ void central_web_server::write_req_continued(central_web_server_req *req, size_t
   io_uring_submit(&ring); //submits the event
 }
 
+std::chrono::system_clock::time_point time_last_debug_central{};
 template<server_type T>
 void central_web_server::run(){
   std::cout << "Using " << num_threads << " threads\n";
@@ -255,6 +256,15 @@ void central_web_server::run(){
       }
       case central_web_server_event::SERVER_THREAD_COMMUNICATION: {
         add_event_read_req(req->fd, central_web_server_event::SERVER_THREAD_COMMUNICATION, req->custom_info); // rearm the eventfd
+
+        if(time_last_debug_central <= std::chrono::system_clock::now()){
+          time_last_debug_central = std::chrono::system_clock::now() + std::chrono::seconds(3);
+          std::cout << "## Central server report ##\n";
+          std::cout << "\tStore items: " << store.size() << "\n";
+          std::cout << "\tStore full size: " << store.full_size() << "\n";
+          std::cout << "## -- END -- ##\n\n";
+        }
+
         if(req->custom_info != -1){ // then the idx is set as custom_info in the add_event_read_req call above
           auto efd_count = *reinterpret_cast<uint64_t*>(req->buff.data()); // we only write a value of 1 to the efd, so if greater than 1, multiple items in queue
           
@@ -369,6 +379,8 @@ void central_web_server::audio_server_read_req_handler(int readfd, int server_id
     server->send_file_back_to_audio_server(server->main_thread_state.fd_to_filepath[readfd], std::move(buff));
     server->main_thread_state.fd_to_filepath.erase(readfd);
   }
+
+  close(readfd); // make sure to close the file descriptor
 }
 
 template<server_type T>

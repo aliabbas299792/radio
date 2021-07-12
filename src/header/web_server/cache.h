@@ -1,6 +1,7 @@
 #ifndef CACHE
 #define CACHE
 
+#include <iostream>
 #include <unordered_set>
 #include <unordered_map>
 #include <vector>
@@ -47,6 +48,9 @@ namespace web_cache {
     }
 
     cache_fetch_item fetch_item(const std::string &filepath, int client_idx, web_server::tcp_client &client){
+      if(client_idx < 0) // for the off chance that an invalid client ID is supplied
+        return { false, nullptr };
+      
       if(filepath_to_cache_idx.count(filepath)) {
         auto current_idx = filepath_to_cache_idx[filepath];
         auto &item = cache_buffer[current_idx];
@@ -108,7 +112,7 @@ namespace web_cache {
       }
     }
     
-    bool try_insert_item(int client_idx, const std::string &filepath, std::vector<char> &&buff){
+    bool try_insert_item(const std::string &filepath, std::vector<char> &&buff){
       int current_idx = -1;
 
       if(free_idxs.size()){ //if free idxs available
@@ -168,6 +172,11 @@ namespace web_cache {
     }
 
     void finished_with_item(int client_idx, web_server::tcp_client &client){ //requires a pointer to the client object, for the using_file stuff - to ensure it's not decremented too many times
+      if(client_idx < 0){ // for the off chance that an invalid client ID is supplied
+        std::cerr << "Client idx: " << client_idx << " ## " << client.using_file << "\n";
+        return;
+      }
+
       if(client.using_file){
         const auto cache_idx = client_idx_to_cache_idx[client_idx];
         cache_buffer[cache_idx].lock_number--;

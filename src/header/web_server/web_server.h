@@ -317,8 +317,6 @@ struct central_web_server_req {
 
 class central_web_server {
 private:
-  std::unordered_map<char*, int> buff_ptr_to_uses_map{};
-  
   template<server_type T>
   friend struct server_data;
 

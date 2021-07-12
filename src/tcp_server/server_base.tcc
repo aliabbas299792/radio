@@ -1,6 +1,7 @@
 #pragma once
 #include "../header/server.h"
 
+#include <chrono>
 #include <sys/socket.h>
 #include <netinet/tcp.h>
 
@@ -78,6 +79,18 @@ void server_base<T>::start(){ //function to run the server
           req = nullptr; //don't want it to be deleted yet
         }
       }else{
+        if(time_last_debug <= std::chrono::system_clock::now()){
+          time_last_debug = std::chrono::system_clock::now() + std::chrono::seconds(3); // up to once every 3 seconds
+          std::cout << "## Server base report ##\n";
+          std::cout << "\tNum clients: " << clients.size() - freed_indexes.size() << "\n";
+          size_t mem_used = 0;
+          mem_used += clients.size();
+          for(const client<T> &client : clients){
+            mem_used += client.send_data.size();
+          }
+          std::cout << "\tMem used: " << mem_used << "\n";
+          std::cout << "## -- END -- ##\n\n";
+        }
         static_cast<server<T>*>(this)->req_event_handler(req, cqe->res);
       }
 

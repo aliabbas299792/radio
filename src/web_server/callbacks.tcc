@@ -103,7 +103,7 @@ void custom_read_cb(int client_idx, int fd, std::vector<char> &&buff, size_t rea
 
     const auto &filepath = web_server->tcp_clients[client_idx].last_requested_read_filepath;
 
-    if(web_server->web_cache.try_insert_item(client_idx, filepath, std::move(buff))){ // try inserting the item
+    if(web_server->web_cache.try_insert_item(filepath, std::move(buff))){ // try inserting the item
       const auto ret_data = web_server->web_cache.fetch_item(filepath, client_idx, web_server->tcp_clients[client_idx]);
       tcp_server->write_connection(client_idx, ret_data.buff, ret_data.size);
     }else{ // if insertion failed, it's not in the cache, so just send the original buffer

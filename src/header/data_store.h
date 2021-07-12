@@ -86,6 +86,12 @@ namespace data_store_namespace {
     }
 
     size_t const size() { return data_vec.size() - free_idxs.size(); }
+    size_t const full_size() {
+      size_t all_size{};
+      for(std::pair<std::vector<char>, int> &item : data_vec)
+        all_size += item.first.size();
+      return all_size;
+    }
 
     buff_idx_pair make_item(size_t size, int uses){ // used to allocate and insert an item
       int idx = 0;

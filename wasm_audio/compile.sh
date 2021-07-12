@@ -5,11 +5,7 @@ emcc \
   -I$LIBDIR/include/opus \
   -lopus \
   -L$LIBDIR/lib \
-  -fsanitize=address \
-  -s ASSERTIONS=1 \
-  -s WASM=1 \
-  -O0 -g \
-  -s TOTAL_MEMORY=1073741824 \
+  -O3 \
   -s EXPORTED_RUNTIME_METHODS='["cwrap", "ccall"]' \
   -s ALLOW_MEMORY_GROWTH=1 \
   -s EXPORTED_FUNCTIONS="['_decode_page', '_output_len', '_malloc', '_free']" \

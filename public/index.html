@@ -10,12 +10,7 @@
     <div id="background"></div>
     <div id="broadcast_time"></div>
     <canvas id="canvas" style="height:257.143px"></canvas>
-    <div id="content">
-      <div id="contentCenter">
-        <h2 id="playing" style="font-family: sans-serif; color: #fff; text-align: center;">Loading...</h2>
-      </div>
-      <div id="time"></div>
-    </div>
+    <h2 id="playing" style="font-family: sans-serif; color: #fff; text-align: center;">Loading...</h2>
     <div>
       <div id="player_bar_holder">
         <div id="controls">
@@ -28,6 +23,9 @@
     <div id="volume_control_container">
       <input type="range" min="1" max="100" value="100" id="volume_control">
     </div>
+    <audio id="dummy_audio" loop>
+      <source src="assets/silence.mp3" type="audio/mp3"> <!-- a hack to use the media session API -->
+    </audio>
     <script src= "/main.js"></script>
     <script src="/assets/index.js"></script>
     <script>
@@ -79,7 +77,7 @@
           volume_control_container.style.opacity = "";
           setTimeout(() => {
             volume_control_container.style.display = ""
-          }, 100)
+          }, 200)
         }
       }
       </script>

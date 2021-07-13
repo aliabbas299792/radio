@@ -2,9 +2,20 @@
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext('2d')
 
+// used just to get some native control stuff
+const dummy_audio_el = document.getElementById("dummy_audio");
+
+if ('mediaSession' in navigator) {
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: 'Radio'
+  });
+  navigator.mediaSession.setActionHandler('play', function() { dummy_audio_el.play(); toggleAudio(); play_btn_click(); });
+  navigator.mediaSession.setActionHandler('pause', function() { dummy_audio_el.pause(); toggleAudio(); play_btn_click(); });
+}
+
 // globals for timing
-const page_start_time = Date.now();
-const time = () => Date.now() - page_start_time; // time elapsed since the page loaded
+let last_play_start_time = Date.now();
+const time = () => Date.now() - last_play_start_time; // time elapsed since the page loaded
 const to_presentable_time = ms => {
   if(ms >= 60000)
       return `${Math.floor(ms/60000)}m ${Math.floor((ms/1000)%60)}s`
@@ -202,6 +213,7 @@ toggle_audio_timeout = undefined;
 function toggleAudio(force_pause){
   if(!player.audio_ws && force_pause) return; // return if already paused
   if(player.audio_ws){
+    dummy_audio_el.pause();
     player.audio_ws.close();
     player.audio_ws = undefined;
     player.gain_node.gain.linearRampToValueAtTime(0.00001, player.context.currentTime + 0.1)
@@ -209,6 +221,7 @@ function toggleAudio(force_pause){
       end_audio()
     }, 1000)
   }else{
+    dummy_audio_el.play();
     clearTimeout(toggle_audio_timeout)
     end_audio()
 
@@ -422,6 +435,9 @@ function set_station(name){
     current_station_data.tracks = list;
     console.log(list)
   })
+
+  // radio connection to the other station starts now
+  last_play_start_time = Date.now()
 
   // force pause
   toggleAudio(true)

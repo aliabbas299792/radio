@@ -1,0 +1,124 @@
+<head>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+</head>
+
+<style>
+*{
+  box-sizing: border-box;
+  padding:0;
+  margin:0;
+  user-select: none;
+}
+
+#player_bar{
+  position: relative;
+  width: 100%;
+  padding:10px;
+}
+
+#player_bar_holder{  
+  position: fixed;
+  top: 100%;
+  left: 0;
+  transform: translate(0, -100%);
+  background: rgba(0, 0, 0, 0.583);
+  width: 100vw;
+  padding: 10px;
+}
+
+#player_progress{
+  height:2em;
+}
+
+#progress_background{  
+  height: 100%;
+  width: 100%;
+  background: #00000085;
+  position: absolute;
+}
+
+#progress{
+  position: relative;
+  width: 50%;
+  float: left;
+  height: 100%;
+  background: #ffffff8f;
+  transition: .2s ease;
+}
+
+#progress_bar{  
+  position: relative;
+  height:100%;
+  width:100%;
+}
+
+
+
+#controls i {  
+  font-size: 3em;
+  color: white;
+  cursor: pointer;
+}
+
+#controls{
+  text-align: center;
+  margin-bottom: 5px;
+}
+
+#setting_btn{
+  float:left;
+  margin-left:10px;
+}
+
+#volume_btn{
+  float:right;
+  margin-right:10px;
+}
+
+#play_btn {
+  transition: .05s ease all;
+}
+</style>
+
+<div>
+  <div id="player_bar_holder">
+    <div id="controls">
+      <i class="material-icons" id="setting_btn">settings</i>
+      <i class="material-icons" id="play_btn">play_arrow</i>
+      <i class="material-icons" id="volume_btn">volume_up</i>
+    </div>
+    <div id="player_bar">
+      <div id="player_progress">
+        <div id="progress_bar">
+          <div id="progress_background"></div>
+          <div id="progress"></div>
+        </div>
+        <div id="indicator"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const play_btn = document.getElementById("play_btn");
+const settings_btn = document.getElementById("setting_btn");
+const volume_btn = document.getElementById("volume_btn");
+const audio_progress = document.getElementById("progress");
+
+play_btn.onclick = function(){
+  play_btn.style.transform = "rotate3d(0,1,0,90deg)";
+  setTimeout(() => {
+    if(play_btn.innerHTML != "pause")
+      play_btn.innerHTML = "pause";
+    else
+      play_btn.innerHTML = "play_arrow";
+    play_btn.style.transform = "";
+  }, 50);
+}
+
+function set_progress(width_fraction){
+  width_percent = Math.min(100, Math.max(0, width_fraction*100));
+  audio_progress.style.width = width_percent + "%";
+}
+</script>

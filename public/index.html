@@ -2,19 +2,86 @@
 <html>
   <head>
     <title>Radio</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
     <link rel="stylesheet" href="/assets/styles.css" type="text/css">
   </head>
   <body>
+    <div id="background"></div>
+    <div id="broadcast_time"></div>
+    <canvas id="canvas" style="height:257.143px"></canvas>
     <div id="content">
-      <div id="broadcast_time"></div>
       <div id="contentCenter">
         <h2 id="playing" style="font-family: sans-serif; color: #fff; text-align: center;">Loading...</h2>
-        <Button onclick="toggleAudio()" id="button">Play</Button>
       </div>
       <div id="time"></div>
     </div>
+    <div>
+      <div id="player_bar_holder">
+        <div id="controls">
+          <i class="material-icons" id="vote_btn">local_activity</i>
+          <i class="material-icons" id="play_btn">play_arrow</i>
+          <i class="material-icons" id="volume_btn">volume_up</i>
+        </div>
+      </div>
+    </div>
+    <div id="volume_control_container">
+      <input type="range" min="1" max="100" value="100" id="volume_control">
+    </div>
     <script src= "/main.js"></script>
     <script src="/assets/index.js"></script>
+    <script>
+      // strictly UI stuff
+      const play_btn = document.getElementById("play_btn");
+      const settings_btn = document.getElementById("vote_btn");
+      const volume_btn = document.getElementById("volume_btn");
+      const volume_control_container= document.getElementById("volume_control_container");
+      const volume_control= volume_control_container.children[0];
+      
+      play_btn_click_timeout = undefined;
+      play_btn.onclick = () => {
+        play_btn_click()
+        toggleAudio()
+      }
+      
+      function play_btn_click(force_pause){
+        if(play_btn.innerHTML == "play_arrow" && force_pause) // return if already paused
+          return;
+
+        play_btn.style.transform = "rotate3d(0,1,0,90deg)";
+        clearTimeout(play_btn_click_timeout);
+        play_btn_click_timeout = setTimeout(() => {
+          if(play_btn.innerHTML != "pause")
+            play_btn.innerHTML = "pause";
+          else
+            play_btn.innerHTML = "play_arrow";
+          play_btn.style.transform = "";
+        }, 50);
+      }
+      
+      volume_control.addEventListener('input', (e) => {
+        let vol = volume_control.value;
+        if(vol == 1)
+          vol = 0;
+        set_volume(vol/100);
+      })
+      
+      volume_btn.addEventListener('click', toggle_volume_control);
+      
+      toggle_volume_timeout = undefined;
+      function toggle_volume_control(){
+        if(volume_control_container.style.display != "block"){
+          volume_control_container.style.display = "block"
+          setTimeout(() => {
+            volume_control_container.style.opacity = 1;
+          }, 10)
+        }else{
+          volume_control_container.style.opacity = "";
+          setTimeout(() => {
+            volume_control_container.style.display = ""
+          }, 100)
+        }
+      }
+      </script>
   </body>
 </html>

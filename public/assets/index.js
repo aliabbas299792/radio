@@ -1,3 +1,7 @@
+// for drawing stuff
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext('2d')
+
 // globals for timing
 const page_start_time = Date.now();
 const time = () => Date.now() - page_start_time; // time elapsed since the page loaded
@@ -21,15 +25,15 @@ fetch("/broadcast_metadata").then(data => data.text()).then(metadata => {
   update_broadcast_time(); // start updating the broadcast time
 })
 
+let stations = undefined;
+fetch("/station_list").then(data => data.json()).then(stations => {
+  stations = stations["stations"];
+});
+
 const time_el = document.getElementById('time');
 const broadcast_time_el = document.getElementById('broadcast_time');
 
 const broadcast_elapsed_time = () => Date.now()/1000 - broadcast_metadata["START_TIME_S"];
-
-function update_time(){
-  time_el.innerHTML = `${to_presentable_time(audio_metadata.time_in_audio())} / ${to_presentable_time(audio_metadata.total_length)}`
-  setTimeout(update_time, 1000);
-}
 
 function update_broadcast_time(){
   broadcast_time_el.innerHTML = `Running for: ${to_presentable_time_seconds(broadcast_elapsed_time())}`
@@ -49,21 +53,22 @@ const audio_metadata = {
   },
   time_left_in_audio: function() {
     return this.total_length - this.time_in_audio()
-  }
+  },
+  metadata_ws: undefined
 };
 
 const player = {
   // elements
   button_el: document.getElementById('button'),
   playing_audio_el: document.getElementById('playing'),
-  // user facing stuff
-  station: (window.location.pathname.indexOf("/listen/") == 0 ? window.location.pathname.replace("/listen/", "") : "test"),
   audio_ws: undefined,
   // internals
   context: new AudioContext(),
   typed_array_previous: new Uint8Array(),
   current_page_time: 0,
-  gain_node: undefined
+  gain_node: undefined,
+  analyser_node: undefined,
+  current_volume: 1
 }
 
 function playPCM(arrayBuffer){ //plays interleaved linear PCM with 16 bit, bit depth
@@ -118,12 +123,9 @@ function playPCM(arrayBuffer){ //plays interleaved linear PCM with 16 bit, bit d
   source.start(player.current_page_time);
   player.current_page_time += Math.round(buffer.duration*100)/100; //2dp
 
-  if(!player.gain_node)
-    player.gain_node = new GainNode(player.context)
-
   source.connect(player.gain_node)
-
-  player.gain_node.connect(player.context.destination);
+  player.gain_node.connect(player.analyser_node)
+  player.analyser_node.connect(player.context.destination);
 }
 
 async function playMusic(typedArrayCurrent){ //takes 1 packet of audio, decode, and then plays it
@@ -171,7 +173,13 @@ async function playMusic(typedArrayCurrent){ //takes 1 packet of audio, decode, 
   }
 }
 
-function update_playing(text, total_length){
+function update_playing(text, total_length, force){
+  if(force){
+    audio_metadata.total_length = total_length
+    return player.playing_audio_el.innerHTML = text;
+  }
+    
+
   setTimeout(() => {
     if(player.playing_audio_el.innerHTML != "Loading...")
       audio_metadata.relative_start_time = time()
@@ -181,19 +189,36 @@ function update_playing(text, total_length){
   }, audio_metadata.time_left_in_audio()) // once this has finished, this is the next title
 }
 
-function toggleAudio(){
-  if(player.audio_ws){
-    player.current_page_time = 0;
-    player.button_el.innerHTML = "Play";
+function end_audio(){
+  player.current_page_time = 0;
 
-    player.audio_ws.close();
+  if(player.context)
     player.context.close();
-    player.gain_node = undefined;
+  player.context = undefined
 
+}
+
+toggle_audio_timeout = undefined;
+function toggleAudio(force_pause){
+  if(!player.audio_ws && force_pause) return; // return if already paused
+  if(player.audio_ws){
+    player.audio_ws.close();
     player.audio_ws = undefined;
+    player.gain_node.gain.linearRampToValueAtTime(0.00001, player.context.currentTime + 0.1)
+    toggle_audio_timeout = setTimeout(() => {
+      end_audio()
+    }, 1000)
   }else{
+    clearTimeout(toggle_audio_timeout)
+    end_audio()
+
     player.context = new AudioContext()
-    player.audio_ws = new WebSocket(`wss://radio.erewhon.xyz/ws/radio/${player.station}/audio_broadcast`)
+    player.analyser_node = new AnalyserNode(player.context)
+    player.gain_node = new GainNode(player.context)
+    player.gain_node.gain.value = player.current_volume;
+    
+    player.audio_ws = new WebSocket(`wss://radio.erewhon.xyz/ws/radio/${current_station_data.name}/audio_broadcast`)
+    
     player.audio_ws.onmessage = msg => {
       if(msg.data == "INVALID_ENDPOINT" || msg.data == "INVALID_STATION"){
         if(msg.data == "INVALID_STATION"){
@@ -210,15 +235,146 @@ function toggleAudio(){
         playMusic(arr)
       }
     }
-    player.button_el.innerText = "Pause";
   }
 }
 
+function resize_canvas(){
+  const dpi = window.devicePixelRatio * 2 //artificially making the DPI higher seems to make the canvas very high resolution
+  const styleWidth = window.innerWidth;
+  const styleHeight = (styleWidth * 9 / 21 > window.innerHeight * 0.4) ? window.innerHeight * 0.4 : styleWidth * 9 / 21; //keeps a 21:9 aspect ratio until it covers 40% of the vertical screen
+
+  canvas.setAttribute('height', styleHeight * dpi)
+  canvas.setAttribute('width', styleWidth * dpi)
+  canvas.setAttribute('style', `width:${styleWidth}px;height:${styleHeight}px;`)
+}
+
+window.addEventListener('resize', () => {
+  resize_canvas();
+})
+
+function drawBars() {
+  if(!player.analyser_node) return;
+
+  const bufferLength = player.analyser_node.frequencyBinCount
+  const dataArray = new Uint8Array(bufferLength)
+  player.analyser_node.getByteFrequencyData(dataArray)
+
+  let barWidth = canvas.width / (dataArray.length - 1) * 1.3 //if you don't do -1 then there is an empty bar on the left (because one bar is 0*width - so we don't count for that)
+  let barHeight = canvas.height * 0.98
+  for (let i = 0; i < dataArray.length; i++) {
+    const colour = interpolateColours(interpolateColoursColours.top, interpolateColoursColours.bottom, 1 - (i / dataArray.length))
+    ctx.beginPath()
+    ctx.fillStyle = colour
+    ctx.fillRect(canvas.width - i * barWidth, canvas.height * 0.1 + canvas.height - barHeight * dataArray[i] / 255, barWidth - 1, barHeight * dataArray[i] / 255)
+    ctx.fill()
+    ctx.closePath()
+  }
+}
+
+function formatTime(ms) { //give a formatted time string
+  ms /= 1000
+  const hours = Math.floor(ms / 3600)
+  const minutes = Math.floor((ms - hours * 3600) / 60)
+  const seconds = Math.floor(ms - hours * 3600 - minutes * 60) % 60
+  const s = String(seconds).padStart(2, '0')
+  const m = String(minutes).padStart(2, '0')
+  const h = String(hours).padStart(2, '0')
+
+  if (h === '00') return `${m}:${s}`
+  return `${h}:${m}:${s}`
+}
+
+function updateProgressBar() {
+  const currentTime = audio_metadata.time_in_audio()
+  const totalDuration = audio_metadata.total_length
+
+  if (!totalDuration || !currentTime) return;
+
+  const percentProgress = Math.max(0, Math.min(1, currentTime / totalDuration))
+
+  ctx.font = `50px sans-serif`
+
+  ctx.fillStyle = "rgba(255,255,255,0.7)"
+  ctx.fillText(`${formatTime(Math.min(totalDuration, currentTime))}/${formatTime(totalDuration)}`, 15, canvas.height - 40) //displays time and makes sure it's clamped to totalDuration (there are slight deviations)
+
+  ctx.beginPath()
+  ctx.moveTo(0, canvas.height - 5)
+  ctx.lineTo(canvas.width, canvas.height - 5)
+  ctx.strokeStyle = "rgba(0,0,0,0.3)"
+  ctx.lineWidth = 20
+  ctx.stroke()
+  ctx.closePath()
+
+  const colourBottom = interpolateColours(interpolateColoursColours.top, interpolateColoursColours.bottom, 0)
+  const colourTop = interpolateColours(interpolateColoursColours.top, interpolateColoursColours.bottom, percentProgress)
+
+  const grad = ctx.createLinearGradient(0, canvas.height - 5, canvas.width * percentProgress, canvas.height - 5)
+  grad.addColorStop(0, colourBottom)
+  grad.addColorStop(1, colourTop)
+
+  ctx.beginPath()
+  ctx.moveTo(0, canvas.height-5)
+  ctx.lineTo(canvas.width * percentProgress, canvas.height - 5)
+
+  ctx.strokeStyle = grad
+  ctx.lineWidth = 20
+  ctx.stroke()
+  ctx.closePath()
+}
+
+function animationLoop() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+  drawBars()
+  updateProgressBar()
+
+  requestAnimationFrame(animationLoop)
+}
+
+function set_volume(vol){
+  if(player.context && player.gain_node)
+    player.gain_node.gain.linearRampToValueAtTime(vol, player.context.currentTime + 0.1)
+  player.current_volume = vol
+  window.localStorage.setItem("volume", vol)
+}
+
+const interpolateColoursColours = {
+  top: "#e74c3c",
+  bottom: "#f39c12"
+}
+
+function interpolateColours(top, bottom, ratio) { //https://stackoverflow.com/a/16360660/3605868
+  const hex = (x) => {
+    x = x.toString(16)
+    return (x.length === 1) ? '0' + x : x
+  }
+
+  top = top.slice(1, 7)
+  bottom = bottom.slice(1, 7)
+
+  const r = Math.ceil(parseInt(top.substring(0, 2), 16) * ratio + parseInt(bottom.substring(0, 2), 16) * (1 - ratio))
+  const g = Math.ceil(parseInt(top.substring(2, 4), 16) * ratio + parseInt(bottom.substring(2, 4), 16) * (1 - ratio))
+  const b = Math.ceil(parseInt(top.substring(4, 6), 16) * ratio + parseInt(bottom.substring(4, 6), 16) * (1 - ratio))
+
+  return "#" + hex(r) + hex(g) + hex(b)
+}
+
 window.addEventListener("load", () => {
-  update_time(); // start time updating from now
+  resize_canvas();
+
+  player.current_volume = Number(window.localStorage.getItem("volume")) // get volume from the local storage
+  volume_control.value = Math.max(1, player.current_volume*100) // sets the volume_control element's value
+
+  
+  requestAnimationFrame(animationLoop);
+
+  start_metadata_connection()
+})
+
+function start_metadata_connection(){
   let just_started = true;
-  const metadata_ws = new WebSocket(`wss://radio.erewhon.xyz/ws/radio/${player.station}/metadata_only`)
-  metadata_ws.onmessage = msg => {
+  audio_metadata.metadata_ws = new WebSocket(`wss://radio.erewhon.xyz/ws/radio/${current_station_data.name}/metadata_only`)
+  audio_metadata.metadata_ws.onmessage = msg => {
     if(msg.data == "INVALID_ENDPOINT" || msg.data == "INVALID_STATION"){
       if(msg.data == "INVALID_STATION"){
         alert("Invalid station selected!");
@@ -230,8 +386,10 @@ window.addEventListener("load", () => {
 
     metadata = JSON.parse(msg.data)
 
-    if(metadata.start_offset == 0 || just_started) // if the same shows up twice, time isn't reset
+    if(metadata.start_offset == 0) // if the same shows up twice, time isn't reset
       update_playing(metadata.title, metadata.total_length);
+    if(just_started)
+      update_playing(metadata.title, metadata.total_length, true);
 
     audio_metadata.time_ms = metadata.start_offset
     audio_metadata.title = metadata.title
@@ -241,4 +399,35 @@ window.addEventListener("load", () => {
       audio_metadata.relative_start_time = -metadata.start_offset;
     }
   }
-})
+}
+
+function stop_metadata_connection(){
+  player.playing_audio_el.innerHTML = "Loading...";
+  audio_metadata.metadata_ws.close()
+}
+
+///// for switching stations
+
+const current_station_data = {
+  tracks: [],
+  name: window.localStorage.getItem("station") || 'test'
+};
+
+function set_station(name){
+  current_station_data.name = name
+  window.localStorage.setItem("station", name)
+
+  fetch(`/audio_list/${name}`).then(data => data.text()).then(text => {
+    const list = text.split("/");
+    current_station_data.tracks = list;
+    console.log(list)
+  })
+
+  // force pause
+  toggleAudio(true)
+  play_btn_click(true)
+  stop_metadata_connection()
+  setTimeout(() => {
+    start_metadata_connection(); // 200ms should be enough to switch
+  }, 200)
+}

@@ -174,8 +174,8 @@ public:
   const int file_request_fd = eventfd(0, 0);
   file_transfer_data get_from_file_transfer_queue();
   void send_file_back_to_audio_server(const std::string &path, std::vector<char> &&buff);
-  void send_audio_request_to_audio_server(const std::string &file_name);
   std::string get_requested_audio();
+  void submit_audio_req(std::string filename);
   
   combined_data_chunk get_broadcast_data();
   void broadcast_to_central_server(std::string &&audio_data, std::string &&metadata_only);

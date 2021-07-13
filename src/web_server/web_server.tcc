@@ -8,33 +8,48 @@ template<server_type T>
 bool basic_web_server<T>::instance_exists = false;
 
 template<server_type T>
-bool basic_web_server<T>::get_process(std::string &path, bool accept_bytes, const std::string& sec_websocket_key, int client_idx){
+bool basic_web_server<T>::get_process(std::string &path, bool accept_bytes, const std::string& sec_websocket_key, int client_idx, std::string ip){
   char *path_temp = strdup(path.c_str());
   
   char *saveptr = nullptr;
   char *token = strtok_r(path_temp, "/", &saveptr);
   std::string subdir = token ? token : "";
 
-  free(path_temp);
-
   if(subdir == "ws"  && sec_websocket_key != ""){
     websocket_accept_read_cb(sec_websocket_key, path.substr(2), client_idx);
+    free(path_temp);
     return true;
   }
 
-  if(subdir == "broadcast_metadata"){
+  std::vector<std::string> subdirs{};
+
+  while((token = strtok_r(nullptr, "/", &saveptr)) != nullptr)
+    subdirs.push_back(token);
+  free(path_temp);
+
+  if(subdir == "audio_list" && subdirs.size() == 1){
+    post_audio_list_req_to_program(client_idx, subdirs[0]); // so we expect the server to respond with the list for this station
+    return true;
+  }
+  
+  if(subdir == "audio_req" && subdirs.size() == 2){
+    post_audio_track_req_to_program(client_idx, subdirs[0], subdirs[1]); // { station, track name } request
+    return true;
+  }
+
+  if(subdir == "broadcast_metadata" && subdirs.size() == 0){
     std::string metadata_str = "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\nBROADCAST_INTERVAL_MS: " + std::to_string(BROADCAST_INTERVAL_MS) + "\nSTART_TIME_S: " + std::to_string(std::chrono::time_point_cast<std::chrono::seconds>(time_start).time_since_epoch().count());
     std::vector<char> metadta{metadata_str.begin(), metadata_str.end()};
     tcp_server->write_connection(client_idx, std::move(metadta));
     return true;
   }
 
-  if(subdir == "station_list"){
+  if(subdir == "station_list" && subdirs.size() == 0){
     post_server_list_request_to_program(client_idx);
     return true;
   }
   
-  if(subdir == "listen"){
+  if(subdir == "listen"){ // the page can be listen/*, the JS side will negotiate what station to connect to
     path = "";
   }
 

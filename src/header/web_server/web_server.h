@@ -54,7 +54,9 @@ namespace web_server{
     int item_idx = -1;
 
     int64_t additional_info = -1;
+    // for any extra data
     std::string additional_str{};
+    std::string additional_str2{};
   };
 
   struct broadcast_set_data {
@@ -218,6 +220,49 @@ namespace web_server{
       tcp_server->notify_event();
     }
     
+    void post_audio_list_req_to_program(int client_idx, std::string station){
+      if(!tcp_server) return; // need this stuff set before posting any messages
+      message_post_data data;
+      data.msg_type = message_type::request_audio_list;
+      data.item_idx = client_idx;
+      data.additional_str = station;
+      to_program_queue.enqueue(std::move(data));
+
+      eventfd_write(central_communication_fd, 1);
+    }
+    
+    void post_audio_track_req_to_program(int client_idx, std::string station, std::string track_name){
+      if(!tcp_server) return; // need this stuff set before posting any messages
+      message_post_data data;
+      data.msg_type = message_type::request_audio_track;
+      data.item_idx = client_idx;
+      data.additional_str = station; // kinda bad way of doing it, but good for now
+      data.additional_str2 = track_name;
+      to_program_queue.enqueue(std::move(data));
+
+      eventfd_write(central_communication_fd, 1);
+    }
+
+    void post_audio_list_req_response_to_server(int client_idx, std::vector<char> &&buff){
+      if(!tcp_server) return; // need this stuff set before posting any messages
+      message_post_data data;
+      data.msg_type = message_type::request_audio_list_response;
+      data.item_idx = client_idx;
+      data.buff = std::move(buff);
+      to_server_queue.enqueue(std::move(data));
+      tcp_server->notify_event();
+    }
+
+    void post_audio_track_req_response_to_server(int client_idx, std::vector<char> &&buff){
+      if(!tcp_server) return; // need this stuff set before posting any messages
+      message_post_data data;
+      data.msg_type = message_type::request_audio_track_response;
+      data.item_idx = client_idx;
+      data.buff = std::move(buff);
+      to_server_queue.enqueue(std::move(data));
+      tcp_server->notify_event();
+    }
+    
     message_post_data get_from_to_program_queue(){ // so called from main program thread
       message_post_data data{};
       to_program_queue.try_dequeue(data);
@@ -235,7 +280,7 @@ namespace web_server{
     //
 
     //responding to get requests
-    bool get_process(std::string &path, bool accept_bytes, const std::string& sec_websocket_key, int client_idx);
+    bool get_process(std::string &path, bool accept_bytes, const std::string& sec_websocket_key, int client_idx, std::string ip = {});
     //sending files
     bool send_file_request(int client_idx, const std::string &filepath, bool accept_bytes, int response_code);
     //checking if it's a valid HTTP request

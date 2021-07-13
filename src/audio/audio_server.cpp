@@ -1,7 +1,7 @@
 #include "../header/audio_server.h"
 #include <chrono>
 #include <algorithm>
-#include <regex>
+#include <sys/eventfd.h>
 #include "../vendor/json/single_include/nlohmann/json.hpp"
 
 using json = nlohmann::json;
@@ -26,9 +26,9 @@ audio_server::audio_server(std::string dir_path, std::string name){ // not threa
   dir_path = (dir_path.find_last_of("/") == dir_path.size() - 1) ? dir_path : dir_path + "/"; // ensures there's a slash at the end
   this->dir_path = dir_path;
 
-  DIR *music_directory_ptr = opendir(dir_path.c_str());
+  DIR *audio_directory_ptr = opendir(dir_path.c_str());
 
-  if(music_directory_ptr == nullptr)
+  if(audio_directory_ptr == nullptr)
     utility::fatal_error("Couldn't open directory");
   
   dirent *file_data_ptr{};
@@ -36,7 +36,7 @@ audio_server::audio_server(std::string dir_path, std::string name){ // not threa
   char *save_ptr{}; //for strtok_r
 
   bool first_loop = true;
-  while((file_data_ptr = readdir(music_directory_ptr)) != nullptr){
+  while((file_data_ptr = readdir(audio_directory_ptr)) != nullptr){
     auto file_name = file_data_ptr->d_name;
     auto original_file_name = file_name;
 
@@ -99,9 +99,6 @@ void audio_server::run(){
     
     auto *req = reinterpret_cast<audio_req*>(cqe->user_data);
     switch(req->event){
-      case audio_events::AUDIO_REQUEST_FROM_PROGRAM:
-        // req->data.audio_request_from_program_filepath;
-        break;
       case audio_events::FILE_READY: {
         auto file_ready_data = get_from_file_transfer_queue();
         std::cout << "File loaded: " << file_ready_data.filepath << "\n";
@@ -139,7 +136,7 @@ void audio_server::run(){
 
           std::string file_name_str = std::string(original_file_name);
 
-          if(data->mask & IN_CREATE){
+          if(data->mask & IN_CREATE || data->mask & IN_MOVED_TO){
             slash_separated_audio_list += "/" + file_name_str;
             audio_list.push_back(file_name_str);
             post_audio_list_update(true, file_name_str); // we've added a file
@@ -421,14 +418,15 @@ void audio_server::send_file_back_to_audio_server(const std::string &path, std::
   eventfd_write(file_ready_fd, 1); // the file is ready to be received on the audio thread
 }
 
-void audio_server::send_audio_request_to_audio_server(const std::string &file_name){
-  audio_request_queue.emplace(file_name);
-}
-
 std::string audio_server::get_requested_audio(){ // returns an empty string if the queue is empty
   std::string req_audio{};
   if(audio_request_queue.try_dequeue(req_audio))
     return req_audio;
   else
     return "";
+}
+
+void audio_server::submit_audio_req(std::string filename){ // returns an empty string if the queue is empty
+  std::string req_audio{};
+  audio_request_queue.enqueue(filename );
 }

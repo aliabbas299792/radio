@@ -280,7 +280,7 @@ void central_web_server::run(){
               case web_server::message_type::broadcast_finished:
                 store.free_item(data.item_idx);
                 break;
-              case web_server::message_type::new_radio_client:
+              case web_server::message_type::new_radio_client: {
                 std::vector<char> response_data_first{};
                 std::vector<char> response_data_second{};
 
@@ -316,6 +316,46 @@ void central_web_server::run(){
 
                 if(broadcast_channel_id != -1)
                   server.post_new_radio_client_response_to_server(data.item_idx, data.additional_info, std::move(response_data_second), broadcast_channel_id);
+                break;
+              }
+              case web_server::message_type::request_audio_track: {
+                std::string response = 
+                  "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n";
+                if(audio_server::server_id_map.count(data.additional_str)){
+                  audio_server *audio_broadcast_server = audio_server::instance(audio_server::server_id_map[data.additional_str]);
+                  if(audio_broadcast_server->main_thread_state.file_set.count(data.additional_str2)){ // file name stored in additional_str2 in this case
+                    audio_broadcast_server->submit_audio_req(data.additional_str2);
+                    response += "SUCCESS";
+                    
+                    std::vector<char> buff{response.begin(), response.end()};
+                    server.post_audio_track_req_response_to_server(data.item_idx, std::move(buff));
+                    break;
+                  }
+                }
+                response += "FAILURE";
+                    
+                std::vector<char> buff{response.begin(), response.end()};
+                server.post_audio_track_req_response_to_server(data.item_idx, std::move(buff));
+                break;
+              }
+              case web_server::message_type::request_audio_list:
+                std::string response = 
+                  "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n";
+                if(audio_server::server_id_map.count(data.additional_str)){
+                    response += audio_server::instance(
+                      audio_server::server_id_map[data.additional_str]
+                    )->main_thread_state.slash_separated_audio_list;
+                  
+                  std::vector<char> buff{response.begin(), response.end()};
+                  
+                  server.post_audio_list_req_response_to_server(data.item_idx, std::move(buff));
+                }else{
+                  response += "NOT_FOUND";
+                  
+                  std::vector<char> buff{response.begin(), response.end()};
+                  
+                  server.post_audio_list_req_response_to_server(data.item_idx, std::move(buff));
+                }
                 break;
             }
           }

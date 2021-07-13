@@ -26,12 +26,12 @@ namespace web_server {
     broadcast_finished,
     new_radio_client,
     new_radio_client_response,
+    request_station_list,
+    request_station_list_response,
     request_audio_list,
     request_audio_list_response,
-    request_audio,
-    request_audio_response,
-    request_station_list,
-    request_station_list_response
+    request_audio_track,
+    request_audio_track_response
   };
 
   struct tcp_client {

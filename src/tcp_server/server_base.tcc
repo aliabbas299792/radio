@@ -221,6 +221,16 @@ int server_base<T>::setup_listener(int port) {
 }
 
 template<server_type T>
+std::string server_base<T>::get_ip_address(int client_idx){
+  int fd = clients[client_idx].sockfd;
+
+  sockaddr_in addr{};
+  socklen_t len = sizeof(addr);
+  getpeername(fd, (struct sockaddr *)&addr, &len);
+  return inet_ntoa(addr.sin_addr);
+}
+
+template<server_type T>
 int server_base<T>::add_accept_req(int listener_fd, sockaddr_storage *client_address, socklen_t *client_address_length){
   io_uring_sqe *sqe = io_uring_get_sqe(&ring); //get a valid SQE (correct index and all)
   io_uring_prep_accept(sqe, listener_fd, (sockaddr*)client_address, client_address_length, 0); //no flags set, prepares an SQE

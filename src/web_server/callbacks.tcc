@@ -77,6 +77,17 @@ void event_cb(tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the ev
     case web_server::message_type::request_station_list_response: {
       int client_idx = data.item_idx;
       tcp_server->write_connection(client_idx, std::move(data.buff));
+      break;
+    }
+    case web_server::message_type::request_audio_list_response: {
+      int client_idx = data.item_idx;
+      tcp_server->write_connection(client_idx, std::move(data.buff));
+      break;
+    }
+    case web_server::message_type::request_audio_track_response: {
+      int client_idx = data.item_idx;
+      tcp_server->write_connection(client_idx, std::move(data.buff));
+      break;
     }
   }
 }
@@ -127,6 +138,7 @@ void read_cb(int client_idx, char *buffer, unsigned int length, tcp_tls_server::
     char *str = nullptr;
     char *saveptr = nullptr;
     char *buffer_str = buffer;
+    std::string ip_str{};
     while((str = strtok_r(((char*)buffer_str), "\r\n", &saveptr))){ //retrieves the headers
       std::string tempStr = std::string(str, strlen(str));
       
@@ -134,9 +146,17 @@ void read_cb(int client_idx, char *buffer, unsigned int length, tcp_tls_server::
         accept_bytes = true;
       if(tempStr.find("Sec-WebSocket-Key") != std::string::npos)
         sec_websocket_key = tempStr.substr(strlen(websocket_key_token));
+      if(tempStr.find("X-Forwarded-For: ") != std::string::npos)
+        ip_str = tempStr.substr(strlen("X-Forwarded-For: "));
       buffer_str = nullptr;
       headers.push_back(tempStr);
     }
+
+    // ip_str is only set when using nginx (the X-Forwarded-For property is set)
+    // otherwise we have direct access to the client, so we get its socket
+    if(ip_str == "")
+      ip_str = tcp_server->get_ip_address(client_idx);
+
 
     char *temp_str = strdup(headers[0].c_str());
     bool is_GET = !strcmp(strtok_r(temp_str, " ", &saveptr), "GET");
@@ -146,7 +166,7 @@ void read_cb(int client_idx, char *buffer, unsigned int length, tcp_tls_server::
 
     //get callback, if unsuccesful then 404
     if( !is_GET ||
-        !web_server->get_process(path, accept_bytes, sec_websocket_key, client_idx)
+        !web_server->get_process(path, accept_bytes, sec_websocket_key, client_idx, ip_str)
       )
     {
       web_server->send_file_request(client_idx, "public/404.html", false, 400); //sends 404 request, should be cached if possible

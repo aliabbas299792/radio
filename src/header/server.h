@@ -205,6 +205,8 @@ namespace tcp_tls_server {
       void kill_server(); // will kill the server
 
       bool is_active = true; // is the server active (only false once it received an exit signal)
+
+      std::string get_ip_address(int client_idx);
   };
 
   template<>

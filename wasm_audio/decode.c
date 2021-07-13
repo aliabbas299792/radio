@@ -124,13 +124,14 @@ int decode_page(uint8_t* input, size_t input_len, uint8_t* previous, size_t prev
   if(prev_len != 0)
     total_len += prev_data.packets_table_length;
 
-  
+  // a 20 ms packet fed to a decoder running at 48 kHz will
+  // always return 960 samples, hence the 960 figure
   uint32_t write_idx = 0;
   const uint32_t decoded_frame_len = 960*channels;
 
   for(int i = 0; i < total_len; i++){
     int j = 0;
-    int16_t decoded_frame[960*channels*2];
+    int16_t decoded_frame[decoded_frame_len*2]; // x2 because dual channel audio
 
     if(prev_len > 0 && prev_data.packets_table_length > i){ // the previous data is discarded - only used for initialising the state of the Opus decoder
 
@@ -167,7 +168,7 @@ int decode_page(uint8_t* input, size_t input_len, uint8_t* previous, size_t prev
     }
     
     //will copy to the correct offset
-    memcpy(&output[write_idx], &decoded_frame[0], frame_size * channels * 2);
+    memcpy(&output[write_idx], &decoded_frame[0], frame_size * channels * 2); // x2 because dual channel audio
     data.read_idx += data.packets_table[j];
     write_idx += frame_size * channels;
   }

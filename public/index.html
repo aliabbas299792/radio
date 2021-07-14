@@ -15,7 +15,7 @@
     <h2 id="playing" style="font-family: sans-serif; color: #fff; text-align: center;">Loading...</h2>
     <div id="player_bar_holder">
       <div id="controls">
-        <i class="material-icons" id="vote_btn">local_activity</i>
+        <i class="material-icons" id="vote_btn" data-bs-toggle="modal" data-bs-target="#vote_audio_modal">local_activity</i>
         <i class="material-icons" id="play_btn">play_arrow</i>
         <i class="material-icons" id="volume_btn">volume_up</i>
       </div>
@@ -32,6 +32,23 @@
       </button>
       <ul class="dropdown-menu">
       </ul>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal fade" id="vote_audio_modal" tabindex="-1" aria-labelledby="vote_audio_modal_label" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="vote_audio_modal_label">Vote for audio</h5>
+            <i type="button" class="btn-close material-icons" data-bs-dismiss="modal">close</i>
+          </div>
+          <div class="modal-body">
+            ...
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script src= "/main.js"></script>
     <script src="/assets/index.js"></script>
     <script>

@@ -75,7 +75,7 @@ server<server_type::TLS>::server(
   wolfSSL_Init();
 
   //create the wolfSSL context
-  if((wolfssl_ctx = wolfSSL_CTX_new(wolfTLSv1_3_server_method())) == NULL)
+  if((wolfssl_ctx = wolfSSL_CTX_new(wolfTLSv1_2_server_method())) == NULL)
     utility::fatal_error("Failed to create the WOLFSSL_CTX");
 
   //load the server certificate

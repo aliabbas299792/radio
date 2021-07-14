@@ -211,3 +211,16 @@ input[type=range]::-ms-thumb {
   border:none;
   box-shadow: none;
 }
+
+
+
+
+
+
+#vote_audio_modal .modal-content {
+  background:rgba(100, 100, 100, 0.583);
+}
+
+#vote_audio_modal_label {
+  color: #fff;
+}

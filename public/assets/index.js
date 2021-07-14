@@ -5,17 +5,26 @@ const ctx = canvas.getContext('2d')
 // used just to get some native control stuff
 const dummy_audio_el = document.getElementById("dummy_audio");
 
-if ('mediaSession' in navigator) {
+const is_mediasession_supported = 'mediaSession' in navigator
+
+if (is_mediasession_supported) {
   navigator.mediaSession.metadata = new MediaMetadata({
     title: 'Radio'
   });
   navigator.mediaSession.setActionHandler('play', function() { dummy_audio_el.play(); toggleAudio(); play_btn_click(); });
   navigator.mediaSession.setActionHandler('pause', function() { dummy_audio_el.pause(); toggleAudio(); play_btn_click(); });
+
+  navigator.mediaSession.setPositionState({ // with this we can make it look like a livestream
+    duration: 0
+  })
 }
 
-navigator.mediaSession.setPositionState({ // with this we can make it a livestream
-  duration: 0
-})
+function updateMetadata(title){
+  if(!is_mediasession_supported) return;
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title
+  });
+}
 
 // globals for timing
 let last_play_start_time = Date.now();
@@ -78,6 +87,15 @@ function update_broadcast_time(){
   broadcast_time_el.innerHTML = `Running for: ${to_presentable_time_seconds(broadcast_elapsed_time())}`
   setTimeout(update_broadcast_time, 1000)
 }
+
+const AudioContext = window.AudioContext // Default
+  || window.webkitAudioContext // Safari and older versions of Chrome
+  || false;
+const createGainNode = (context) => context.createGain() || context.createGainNode();
+const createAnalyserNode = (context) => context.createAnalyser() || context.createAnalyserNode();
+
+if(!AudioContext)
+  alert("Radio isn't supported on this device.")
 
 const audio_metadata = {
   time_ms: 0,
@@ -215,6 +233,7 @@ async function playMusic(typedArrayCurrent){ //takes 1 packet of audio, decode, 
 function update_playing(text, total_length, force){
   if(force){
     audio_metadata.total_length = total_length
+    updateMetadata(text);
     return player.playing_audio_el.innerHTML = text;
   }
     
@@ -225,6 +244,7 @@ function update_playing(text, total_length, force){
     
     audio_metadata.total_length = total_length
     player.playing_audio_el.innerHTML = text;
+    updateMetadata(text);
   }, audio_metadata.time_left_in_audio()) // once this has finished, this is the next title
 }
 
@@ -261,8 +281,8 @@ function toggleAudio(force_pause){
     end_audio()
 
     player.context = new AudioContext()
-    player.analyser_node = new AnalyserNode(player.context)
-    player.gain_node = new GainNode(player.context)
+    player.analyser_node = createAnalyserNode(player.context)
+    player.gain_node = createGainNode(player.context)
     player.gain_node.gain.value = player.current_volume;
     
     player.audio_ws = new WebSocket(`wss://radio.erewhon.xyz/ws/radio/${current_station_data.name}/audio_broadcast`)
@@ -352,7 +372,7 @@ function updateProgressBar() {
 
   const percentProgress = Math.max(0, Math.min(1, currentTime / totalDuration))
 
-  ctx.font = `50px sans-serif`
+  ctx.font = `${40*window.devicePixelRatio}px sans-serif`
 
   ctx.fillStyle = "rgba(255,255,255,0.7)"
   ctx.fillText(`${formatTime(Math.min(totalDuration, currentTime))}/${formatTime(totalDuration)}`, 15, canvas.height - 40) //displays time and makes sure it's clamped to totalDuration (there are slight deviations)
@@ -461,6 +481,8 @@ function start_metadata_connection(){
 }
 
 function stop_metadata_connection(){
+  // radio connection to the other station starts now
+  last_play_start_time = Date.now()
   player.playing_audio_el.innerHTML = "Loading...";
   if(audio_metadata.metadata_ws)
     audio_metadata.metadata_ws.close()
@@ -481,9 +503,6 @@ function set_station(name){
     const list = text.split("/");
     current_station_data.tracks = list;
   })
-
-  // radio connection to the other station starts now
-  last_play_start_time = Date.now()
 
   // force pause
   toggleAudio(true)

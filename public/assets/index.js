@@ -251,6 +251,11 @@ function toggleAudio(force_pause){
     }, 1000)
   }else{
     dummy_audio_el.play(); // stuff to control mediasession api
+
+    if(audio_metadata.metadata_ws.readyState === WebSocket.CLOSED){ // if the metadata websocket has timed out for example, this should restart it
+      stop_metadata_connection()
+      start_metadata_connection()
+    }
     
     clearTimeout(toggle_audio_timeout)
     end_audio()
@@ -276,11 +281,12 @@ function toggleAudio(force_pause){
       let prev_durations = 0;
       for(const page of audio_data.pages){
         // i.e this is saying if the next audio page is up to 200ms before the current playback,
-        // or more than 10 seconds ahead (i.e it's from the next track and the time has looped around)
+        // or more than 20 seconds in the past (i.e it's from the next track and the time has looped around)
         // then it's a valid page and play it, otherwise it is skipped
+        // (this assumes that the tracks are at least around 30 seconds long)
         // this should prevent excessive drift from the metadata timing
         if(audio_data.start_offset + prev_durations > audio_metadata.time_in_audio() - 200 
-          || audio_data.start_offset + prev_durations > audio_metadata.time_in_audio() + 10000){
+          || audio_data.start_offset + prev_durations < audio_metadata.time_in_audio() - 20000){
           arr = new Uint8Array(page.buff)
           playMusic(arr)
         }

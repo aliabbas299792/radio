@@ -13,6 +13,10 @@ if ('mediaSession' in navigator) {
   navigator.mediaSession.setActionHandler('pause', function() { dummy_audio_el.pause(); toggleAudio(); play_btn_click(); });
 }
 
+navigator.mediaSession.setPositionState({ // with this we can make it a livestream
+  duration: 0
+})
+
 // globals for timing
 let last_play_start_time = Date.now();
 const time = () => Date.now() - last_play_start_time; // time elapsed since the page loaded
@@ -36,10 +40,34 @@ fetch("/broadcast_metadata").then(data => data.text()).then(metadata => {
   update_broadcast_time(); // start updating the broadcast time
 })
 
-let stations = undefined;
+let stations_list = undefined;
 fetch("/station_list").then(data => data.json()).then(stations => {
-  stations = stations["stations"];
+  stations_list = stations["stations"];
+  populate_stations_dropdown();
 });
+const stations_el = document.getElementById("stations");
+
+function populate_stations_dropdown(){
+  const dropdown_items_el = [...stations_el.children].filter(item => item.getAttribute('class') == 'dropdown-menu')[0];
+
+  const button_el = [...stations_el.children].filter(item => item.getAttribute('type') == 'button')[0];
+  const station = window.localStorage.getItem("station") ? window.localStorage.getItem("station") : stations_list[0]
+  button_el.innerHTML = station.split("_").map(word => word[0].toUpperCase() + word.slice(1)).join(" ")
+  set_station(station)
+  
+  for(let station of stations_list){
+    station = station.split("_").map(word => word[0].toUpperCase() + word.slice(1)).join(" ")
+    dropdown_items_el.innerHTML += `<li><a class="dropdown-item" onclick='set_station_from_el(this)'>${station}</a></li>`;
+  }
+}
+
+function set_station_from_el(el){
+  const button_el = [...stations_el.children].filter(item => item.getAttribute('type') == 'button')[0];
+  const station = el.innerHTML.toLowerCase().replace(/ /g, '_')
+  button_el.innerHTML = el.innerHTML;
+  if(station != current_station_data.name)
+    set_station(station)
+}
 
 const time_el = document.getElementById('time');
 const broadcast_time_el = document.getElementById('broadcast_time');
@@ -213,7 +241,8 @@ toggle_audio_timeout = undefined;
 function toggleAudio(force_pause){
   if(!player.audio_ws && force_pause) return; // return if already paused
   if(player.audio_ws){
-    dummy_audio_el.pause();
+    dummy_audio_el.pause(); // stuff to control mediasession api
+
     player.audio_ws.close();
     player.audio_ws = undefined;
     player.gain_node.gain.linearRampToValueAtTime(0.00001, player.context.currentTime + 0.1)
@@ -221,7 +250,8 @@ function toggleAudio(force_pause){
       end_audio()
     }, 1000)
   }else{
-    dummy_audio_el.play();
+    dummy_audio_el.play(); // stuff to control mediasession api
+    
     clearTimeout(toggle_audio_timeout)
     end_audio()
 
@@ -231,7 +261,6 @@ function toggleAudio(force_pause){
     player.gain_node.gain.value = player.current_volume;
     
     player.audio_ws = new WebSocket(`wss://radio.erewhon.xyz/ws/radio/${current_station_data.name}/audio_broadcast`)
-    
     player.audio_ws.onmessage = msg => {
       if(msg.data == "INVALID_ENDPOINT" || msg.data == "INVALID_STATION"){
         if(msg.data == "INVALID_STATION"){
@@ -241,38 +270,50 @@ function toggleAudio(force_pause){
         }
         return;
       }
+
   
-      audio_data = JSON.parse(msg.data)
+      const audio_data = JSON.parse(msg.data)
+      let prev_durations = 0;
       for(const page of audio_data.pages){
-        arr = new Uint8Array(page.buff)
-        playMusic(arr)
+        // i.e this is saying if the next audio page is up to 200ms before the current playback,
+        // or more than 10 seconds ahead (i.e it's from the next track and the time has looped around)
+        // then it's a valid page and play it, otherwise it is skipped
+        // this should prevent excessive drift from the metadata timing
+        if(audio_data.start_offset + prev_durations > audio_metadata.time_in_audio() - 200 
+          || audio_data.start_offset + prev_durations > audio_metadata.time_in_audio() + 10000){
+          arr = new Uint8Array(page.buff)
+          playMusic(arr)
+        }
+        prev_durations += page.duration;
       }
     }
   }
 }
 
-function resize_canvas(){
+function resize(){
   const dpi = window.devicePixelRatio * 2 //artificially making the DPI higher seems to make the canvas very high resolution
   const styleWidth = window.innerWidth;
   const styleHeight = (styleWidth * 9 / 21 > window.innerHeight * 0.4) ? window.innerHeight * 0.4 : styleWidth * 9 / 21; //keeps a 21:9 aspect ratio until it covers 40% of the vertical screen
 
   canvas.setAttribute('height', styleHeight * dpi)
   canvas.setAttribute('width', styleWidth * dpi)
-  canvas.setAttribute('style', `width:${styleWidth}px;height:${styleHeight}px;`)
+  canvas.setAttribute('style', `width:${styleWidth}px;height:${styleHeight}px;top:${player_bar_holder.getBoundingClientRect().y+0.1*window.devicePixelRatio}px`)
+
+  volume_control_container.style.top = `${window.innerHeight-210}px`
 }
 
 window.addEventListener('resize', () => {
-  resize_canvas();
+  resize();
 })
 
 function drawBars() {
   if(!player.analyser_node) return;
 
-  const bufferLength = player.analyser_node.frequencyBinCount
+  const bufferLength = Math.min(player.analyser_node.frequencyBinCount, canvas.width/20); // this way get a reasonable number of bars
   const dataArray = new Uint8Array(bufferLength)
   player.analyser_node.getByteFrequencyData(dataArray)
 
-  let barWidth = canvas.width / (dataArray.length - 1) * 1.3 //if you don't do -1 then there is an empty bar on the left (because one bar is 0*width - so we don't count for that)
+  let barWidth = canvas.width / (dataArray.length - 1) //if you don't do -1 then there is an empty bar on the left (because one bar is 0*width - so we don't count for that)
   let barHeight = canvas.height * 0.98
   for (let i = 0; i < dataArray.length; i++) {
     const colour = interpolateColours(interpolateColoursColours.top, interpolateColoursColours.bottom, 1 - (i / dataArray.length))
@@ -311,10 +352,10 @@ function updateProgressBar() {
   ctx.fillText(`${formatTime(Math.min(totalDuration, currentTime))}/${formatTime(totalDuration)}`, 15, canvas.height - 40) //displays time and makes sure it's clamped to totalDuration (there are slight deviations)
 
   ctx.beginPath()
-  ctx.moveTo(0, canvas.height - 5)
-  ctx.lineTo(canvas.width, canvas.height - 5)
+  ctx.moveTo(0, canvas.height)
+  ctx.lineTo(canvas.width, canvas.height)
   ctx.strokeStyle = "rgba(0,0,0,0.3)"
-  ctx.lineWidth = 20
+  ctx.lineWidth = 20*window.devicePixelRatio
   ctx.stroke()
   ctx.closePath()
 
@@ -326,11 +367,11 @@ function updateProgressBar() {
   grad.addColorStop(1, colourTop)
 
   ctx.beginPath()
-  ctx.moveTo(0, canvas.height-5)
-  ctx.lineTo(canvas.width * percentProgress, canvas.height - 5)
+  ctx.moveTo(0, canvas.height)
+  ctx.lineTo(canvas.width * percentProgress, canvas.height)
 
   ctx.strokeStyle = grad
-  ctx.lineWidth = 20
+  ctx.lineWidth = 20*window.devicePixelRatio
   ctx.stroke()
   ctx.closePath()
 }
@@ -373,15 +414,14 @@ function interpolateColours(top, bottom, ratio) { //https://stackoverflow.com/a/
 }
 
 window.addEventListener("load", () => {
-  resize_canvas();
+  resize();
 
-  player.current_volume = Number(window.localStorage.getItem("volume")) // get volume from the local storage
+  // also volume doesn't default to 0
+  player.current_volume = window.localStorage.getItem("volume") ? Number(window.localStorage.getItem("volume")) : 1 // get volume from the local storage
   volume_control.value = Math.max(1, player.current_volume*100) // sets the volume_control element's value
 
   
   requestAnimationFrame(animationLoop);
-
-  start_metadata_connection()
 })
 
 function start_metadata_connection(){
@@ -416,14 +456,15 @@ function start_metadata_connection(){
 
 function stop_metadata_connection(){
   player.playing_audio_el.innerHTML = "Loading...";
-  audio_metadata.metadata_ws.close()
+  if(audio_metadata.metadata_ws)
+    audio_metadata.metadata_ws.close()
 }
 
 ///// for switching stations
 
 const current_station_data = {
   tracks: [],
-  name: window.localStorage.getItem("station") || 'test'
+  name: window.localStorage.getItem("station")
 };
 
 function set_station(name){
@@ -433,7 +474,6 @@ function set_station(name){
   fetch(`/audio_list/${name}`).then(data => data.text()).then(text => {
     const list = text.split("/");
     current_station_data.tracks = list;
-    console.log(list)
   })
 
   // radio connection to the other station starts now
@@ -447,3 +487,8 @@ function set_station(name){
     start_metadata_connection(); // 200ms should be enough to switch
   }, 200)
 }
+
+window.addEventListener('click', e => {
+  if(e.target.id != "volume_control_container" && e.target.id != "volume_control" && volume_control_container.style.opacity == 1)
+    toggle_volume_control()
+})

@@ -21,9 +21,10 @@
 
 #broadcast_time{
   color:#fff;
-  position:absolute;
+  float:right;
   font-family:sans-serif;
   padding:20px;
+  position:relative;
 }
 
 #playing{
@@ -72,7 +73,6 @@ html{
 }
 
 #canvas {
-  top: calc(100% - 3em - 28px);
   position: absolute;
   transform:translate(0, -100%);
   z-index: 100;
@@ -180,7 +180,6 @@ input[type=range]::-ms-thumb {
 #volume_control_container {
   transform: rotate(-90deg);
   position: absolute;
-  top: calc(100% - 210px);
   right: -39px;
   padding: 20px;
   background: #00000099;
@@ -193,4 +192,38 @@ input[type=range]::-ms-thumb {
 
 #volume_control_container input {
   background: #ffffff94;
+}
+
+#stations {
+  position:relative;
+  top:10px;
+  left:10px;
+}
+
+
+
+
+
+.dropdown, .dropdown-menu, .dropdown-item {
+  -webkit-transition: all 0.3s;
+  -moz-transition: all 0.3s;
+  -ms-transition: all 0.3s;
+  -o-transition: all 0.3s;
+  transition: all 0.3s;
+}
+
+.dropdown-menu.show {
+  transform:translate(0, 50px);
+}
+
+.btn-secondary {
+  background: rgb(156 156 156 / 17%);
+  border:none;
+  padding: 10px 20px;
+}
+
+.btn-secondary:hover, .btn-secondary:focus {
+  background: #5c636a70;
+  border:none;
+  box-shadow: none;
 }

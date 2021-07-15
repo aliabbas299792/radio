@@ -48,6 +48,11 @@ bool basic_web_server<T>::get_process(std::string &path, bool accept_bytes, cons
     post_server_list_request_to_program(client_idx);
     return true;
   }
+
+  if(subdir == "audio_queue" && subdirs.size() == 1){
+    post_audio_queue_req_to_program(client_idx, subdirs[0]);
+    return true;
+  }
   
   if(subdir == "listen"){ // the page can be listen/*, the JS side will negotiate what station to connect to
     path = "";

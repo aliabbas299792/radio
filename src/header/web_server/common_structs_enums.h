@@ -31,7 +31,9 @@ namespace web_server {
     request_audio_list,
     request_audio_list_response,
     request_audio_track,
-    request_audio_track_response
+    request_audio_track_response,
+    request_audio_queue,
+    request_audio_queue_response
   };
 
   struct tcp_client {

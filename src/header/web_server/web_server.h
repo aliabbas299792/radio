@@ -230,18 +230,6 @@ namespace web_server{
 
       eventfd_write(central_communication_fd, 1);
     }
-    
-    void post_audio_track_req_to_program(int client_idx, std::string station, std::string track_name){
-      if(!tcp_server) return; // need this stuff set before posting any messages
-      message_post_data data;
-      data.msg_type = message_type::request_audio_track;
-      data.item_idx = client_idx;
-      data.additional_str = station; // kinda bad way of doing it, but good for now
-      data.additional_str2 = track_name;
-      to_program_queue.enqueue(std::move(data));
-
-      eventfd_write(central_communication_fd, 1);
-    }
 
     void post_audio_list_req_response_to_server(int client_idx, std::vector<char> &&buff){
       if(!tcp_server) return; // need this stuff set before posting any messages
@@ -252,11 +240,44 @@ namespace web_server{
       to_server_queue.enqueue(std::move(data));
       tcp_server->notify_event();
     }
+    
+    void post_audio_track_req_to_program(int client_idx, std::string station, std::string track_name){
+      if(!tcp_server) return; // need this stuff set before posting any messages
+      message_post_data data;
+      data.msg_type = message_type::request_audio_track;
+      data.item_idx = client_idx;
+      data.additional_str = station;
+      data.additional_str2 = track_name;
+      to_program_queue.enqueue(std::move(data));
+
+      eventfd_write(central_communication_fd, 1);
+    }
 
     void post_audio_track_req_response_to_server(int client_idx, std::vector<char> &&buff){
       if(!tcp_server) return; // need this stuff set before posting any messages
       message_post_data data;
       data.msg_type = message_type::request_audio_track_response;
+      data.item_idx = client_idx;
+      data.buff = std::move(buff);
+      to_server_queue.enqueue(std::move(data));
+      tcp_server->notify_event();
+    }
+    
+    void post_audio_queue_req_to_program(int client_idx, std::string station){
+      if(!tcp_server) return; // need this stuff set before posting any messages
+      message_post_data data;
+      data.msg_type = message_type::request_audio_queue;
+      data.item_idx = client_idx;
+      data.additional_str = station;
+      to_program_queue.enqueue(std::move(data));
+
+      eventfd_write(central_communication_fd, 1);
+    }
+
+    void post_audio_queue_req_response_to_server(int client_idx, std::vector<char> &&buff){
+      if(!tcp_server) return; // need this stuff set before posting any messages
+      message_post_data data;
+      data.msg_type = message_type::request_audio_queue_response;
       data.item_idx = client_idx;
       data.buff = std::move(buff);
       to_server_queue.enqueue(std::move(data));

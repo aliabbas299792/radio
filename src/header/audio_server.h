@@ -37,7 +37,10 @@ struct audio_data {
   float audio2_start_offset{};
 };
 
-enum class audio_events { AUDIO_BROADCAST_EVT, FILE_REQUEST, INOTIFY_DIR_CHANGED, AUDIO_LIST, AUDIO_LIST_UPDATE, FILE_READY, AUDIO_REQUEST_FROM_PROGRAM, BROADCAST_TIMER, KILL };
+enum class audio_events {
+	AUDIO_BROADCAST_EVT, FILE_REQUEST, INOTIFY_DIR_CHANGED, AUDIO_LIST, AUDIO_LIST_UPDATE,
+	FILE_READY, AUDIO_REQUEST_FROM_PROGRAM, AUDIO_QUEUE, BROADCAST_TIMER, KILL
+};
 
 static struct {
   std::array<float, 4> silkOnly{10, 20, 40, 60};
@@ -100,12 +103,33 @@ struct combined_data_chunk {
   combined_data_chunk() {}
 };
 
+struct audio_req_from_program {
+	int client_idx{};
+	std::string str_data{}; // either file name or response
+  int thread_id{}; // what thread is it from
+	audio_req_from_program(std::string str_data, int client_idx, int thread_id) : client_idx(client_idx), str_data(str_data), thread_id(thread_id) {}
+	audio_req_from_program() {}
+};
+
+struct audio_queue_data {
+  int client_idx{};
+  int thread_id{};
+  std::string file_queue{};
+  audio_queue_data() {}
+  audio_queue_data(int client_idx, int thread_id, std::string file_queue = "") : file_queue(file_queue), thread_id(thread_id), client_idx(client_idx) {} // file_queue is only used in the response, so optional
+};
+
 class audio_server {
+  std::unordered_set<std::string> file_set{};
+
   std::vector<std::string> audio_file_paths{};
   std::vector<std::string> audio_list{};
   std::string slash_separated_audio_list{}; // file names are in quotes
   std::list<int> last_10_items{};
   std::deque<audio_chunk> chunks_of_audio{};
+
+	std::vector<std::string> currently_queued_audio{};
+	std::queue<std::string> audio_queue{};
 
   //
   ////communication between threads////
@@ -113,9 +137,17 @@ class audio_server {
 
   //lock free queues used to transport data between threads
   moodycamel::ReaderWriterQueue<audio_file_list_data> audio_file_list_data_queue{};
+
   moodycamel::ReaderWriterQueue<file_transfer_data> file_transfer_queue{};
-  moodycamel::ReaderWriterQueue<std::string> audio_request_queue{};
+	moodycamel::ReaderWriterQueue<file_transfer_data> file_req_transfer_queue{};
+
+	moodycamel::ReaderWriterQueue<audio_req_from_program> audio_request_queue{};
+	moodycamel::ReaderWriterQueue<audio_req_from_program> audio_request_response_queue{};
+
   moodycamel::ReaderWriterQueue<combined_data_chunk> broadcast_queue{}; // the audio data chunk and the metadata only chunk
+
+  moodycamel::ReaderWriterQueue<audio_queue_data> get_currently_queued_audio_req_queue{};
+  moodycamel::ReaderWriterQueue<audio_queue_data> get_currently_queued_audio_response_queue{};
 
   std::string audio_server_name{};
   std::string dir_path = "";
@@ -166,16 +198,32 @@ public:
   void post_audio_list_update(const bool addition, const std::string &file_name);
   void request_audio_list();
   audio_file_list_data get_from_audio_file_list_data_queue();
-  const int file_ready_fd = eventfd(0, 0);
-  
-  // relating to the actual broadcast
+
+	// relating to the actual broadcast
   const int timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
-  void send_file_request_to_program(const std::string &path);
-  const int file_request_fd = eventfd(0, 0);
-  file_transfer_data get_from_file_transfer_queue();
-  void send_file_back_to_audio_server(const std::string &path, std::vector<char> &&buff);
+
   std::string get_requested_audio();
-  void submit_audio_req(std::string filename);
+
+  void submit_audio_req(std::string filename, int client_idx, int thread_id);
+	void submit_audio_req_response(std::string resp, int client_idx, int thread_id);
+  audio_req_from_program get_from_audio_req_queue();
+  audio_req_from_program get_from_audio_req_response_queue();
+	const int audio_req_fd = eventfd(0, 0); // should push data to the audio_req queue
+	const int audio_req_response_fd = eventfd(0, 0); // should push some data to the response queue
+
+  void get_audio_queue(int client_idx, int thread_id);
+	void get_audio_queue_handler(int client_idx, int thread_id); // should simply send back a response with the current queue (ordered)
+  audio_queue_data get_queue_req_from_data_queue();
+  audio_queue_data get_queue_response_from_data_queue();
+	const int get_queue_fd = eventfd(0, 0);
+	const int get_queue_response_fd = eventfd(0, 0);
+  
+  void send_file_request_to_program(const std::string &path);
+  void send_file_back_to_audio_server(const std::string &path, std::vector<char> &&buff);
+	file_transfer_data get_from_file_req_transfer_queue();
+  file_transfer_data get_from_file_transfer_queue();
+  const int file_request_fd = eventfd(0, 0);
+	const int file_ready_fd = eventfd(0, 0);
   
   combined_data_chunk get_broadcast_data();
   void broadcast_to_central_server(std::string &&audio_data, std::string &&metadata_only);
@@ -183,7 +231,6 @@ public:
 
   // these are updated via the event loop on the main thread, rather than directly since could cause a data race
   struct {
-    std::unordered_set<std::string> file_set{};
     std::string slash_separated_audio_list{};
     
     std::unordered_map<int, std::string> fd_to_filepath{};

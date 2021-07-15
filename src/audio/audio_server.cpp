@@ -51,6 +51,7 @@ audio_server::audio_server(std::string dir_path, std::string name){ // not threa
       audio_file_paths.push_back(dir_path + std::string(original_file_name) + ".opus"); // saves all the audio file paths
 
       audio_list.push_back(original_file_name);
+      file_set.insert(original_file_name);
       if(first_loop){
         slash_separated_audio_list += std::string(original_file_name);
         first_loop = false;
@@ -85,6 +86,9 @@ void audio_server::run(){
   utility::set_timerfd_interval(timerfd, BROADCAST_INTERVAL_MS);
   fd_read_req(timerfd, audio_events::BROADCAST_TIMER);
 
+	fd_read_req(audio_req_fd, audio_events::AUDIO_REQUEST_FROM_PROGRAM);
+  fd_read_req(get_queue_fd, audio_events::AUDIO_QUEUE);
+
   current_audio_finish_time = std::chrono::system_clock::now();
   current_playback_time = current_audio_finish_time;
 
@@ -118,7 +122,7 @@ void audio_server::run(){
 
         fd_read_req(timerfd, audio_events::BROADCAST_TIMER);
         break;
-      case audio_events::INOTIFY_DIR_CHANGED:
+  		case audio_events::INOTIFY_DIR_CHANGED: {
         auto &buff = req->buff;
         int event_name_length = 0;
         for(char *ptr = &buff[0]; ptr < &buff[0] + cqe->res; ptr += sizeof(inotify_event) + event_name_length){ // loop over all inotify events
@@ -140,15 +144,40 @@ void audio_server::run(){
             slash_separated_audio_list += "/" + file_name_str;
             audio_list.push_back(file_name_str);
             post_audio_list_update(true, file_name_str); // we've added a file
+            file_set.insert(file_name_str);
           }else{
             audio_list.erase(std::remove(audio_list.begin(), audio_list.end(), file_name_str), audio_list.end()); // remove the deleted file
             slash_separated_audio_list = utility::remove_from_slash_string(slash_separated_audio_list, file_name_str);
             post_audio_list_update(false, file_name_str); // we've removed a file
+            file_set.erase(file_name_str);
           }
         }
 
         fd_read_req(inotify_fd, audio_events::INOTIFY_DIR_CHANGED, inotify_read_size); // guaranteed enough for atleast 1 event
         break;
+			}
+		  case audio_events::AUDIO_REQUEST_FROM_PROGRAM: {
+				audio_req_from_program req = get_from_audio_req_queue();
+
+        // only allow something to be queued if it hasn't been queued already
+				if(file_set.count(req.str_data) && std::find(currently_queued_audio.begin(), currently_queued_audio.end(), req.str_data) == currently_queued_audio.end()){
+          audio_queue.push(req.str_data);
+          currently_queued_audio.push_back(req.str_data);
+
+          submit_audio_req_response("SUCCESS", req.client_idx, req.thread_id);
+        }else{
+          submit_audio_req_response("FAILURE", req.client_idx, req.thread_id);
+        }
+
+				fd_read_req(audio_req_fd, audio_events::AUDIO_REQUEST_FROM_PROGRAM); //rearm the fd
+			  break;
+	  	}
+      case audio_events::AUDIO_QUEUE: {
+        auto data = get_queue_req_from_data_queue();
+        get_audio_queue_handler(data.client_idx, data.thread_id);
+        
+        fd_read_req(get_queue_fd, audio_events::AUDIO_QUEUE);
+      }
     }
     
     delete req;
@@ -399,7 +428,7 @@ void audio_server::kill_server(){
 }
 
 void audio_server::send_file_request_to_program(const std::string &path){
-  file_transfer_queue.emplace(path);
+  file_req_transfer_queue.emplace(path);
   eventfd_write(file_request_fd, 1); // notify the main program thread
 }
 
@@ -407,10 +436,16 @@ void audio_server::request_audio_list(){
   eventfd_write(send_audio_list, 1); // ask for the list
 }
 
-file_transfer_data audio_server::get_from_file_transfer_queue(){
+file_transfer_data audio_server::get_from_file_req_transfer_queue(){
   file_transfer_data data{};
-  file_transfer_queue.try_dequeue(data);
+  file_req_transfer_queue.try_dequeue(data);
   return data;
+}
+
+file_transfer_data audio_server::get_from_file_transfer_queue(){
+	file_transfer_data data{};
+	file_transfer_queue.try_dequeue(data);
+	return data;
 }
 
 void audio_server::send_file_back_to_audio_server(const std::string &path, std::vector<char> &&buff){
@@ -419,14 +454,64 @@ void audio_server::send_file_back_to_audio_server(const std::string &path, std::
 }
 
 std::string audio_server::get_requested_audio(){ // returns an empty string if the queue is empty
-  std::string req_audio{};
-  if(audio_request_queue.try_dequeue(req_audio))
-    return req_audio;
-  else
+  if(audio_queue.size() == 0)
     return "";
+
+  const std::string audio = audio_queue.front();
+  audio_queue.pop();
+
+  currently_queued_audio.erase(std::remove(currently_queued_audio.begin(), currently_queued_audio.end(), audio), currently_queued_audio.end());
+
+  if(file_set.count(audio)) // i.e if the file has been erased
+    return audio;
+  return "";
 }
 
-void audio_server::submit_audio_req(std::string filename){ // returns an empty string if the queue is empty
-  std::string req_audio{};
-  audio_request_queue.enqueue(filename );
+void audio_server::submit_audio_req(std::string filename, int client_idx, int thread_id){ // returns an empty string if the queue is empty
+  audio_request_queue.emplace(filename, client_idx, thread_id);
+	eventfd_write(audio_req_fd, 1);
+}
+
+void audio_server::submit_audio_req_response(std::string resp, int client_idx, int thread_id){
+	audio_request_response_queue.emplace(resp, client_idx, thread_id);
+	eventfd_write(audio_req_response_fd, 1);
+}
+
+audio_req_from_program audio_server::get_from_audio_req_queue(){
+  audio_req_from_program data{};
+  audio_request_queue.try_dequeue(data);
+  return data;
+}
+
+audio_req_from_program audio_server::get_from_audio_req_response_queue(){
+  audio_req_from_program data{};
+  audio_request_response_queue.try_dequeue(data);
+  return data;
+}
+
+void audio_server::get_audio_queue(int client_idx, int thread_id){
+  get_currently_queued_audio_req_queue.emplace(client_idx, thread_id);
+  eventfd_write(get_queue_fd, 1);
+}
+
+void audio_server::get_audio_queue_handler(int client_idx, int thread_id){
+  std::string queued_list{};
+
+  for(const auto &file : currently_queued_audio)
+    queued_list += file + "/";
+
+  get_currently_queued_audio_response_queue.emplace(client_idx, thread_id, queued_list);
+  eventfd_write(get_queue_response_fd, 1);
+}
+
+audio_queue_data audio_server::get_queue_req_from_data_queue(){
+  audio_queue_data data{};
+  get_currently_queued_audio_req_queue.try_dequeue(data);
+  return data;
+}
+
+audio_queue_data audio_server::get_queue_response_from_data_queue(){
+  audio_queue_data data{};
+  get_currently_queued_audio_response_queue.try_dequeue(data);
+  return data;
 }

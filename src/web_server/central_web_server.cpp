@@ -319,28 +319,23 @@ void central_web_server::run(){
                 break;
               }
               case web_server::message_type::request_audio_track: {
-                std::string response = 
-                  "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n";
                 if(audio_server::server_id_map.count(data.additional_str)){
                   audio_server *audio_broadcast_server = audio_server::instance(audio_server::server_id_map[data.additional_str]);
-                  if(audio_broadcast_server->main_thread_state.file_set.count(data.additional_str2)){ // file name stored in additional_str2 in this case
-                    audio_broadcast_server->submit_audio_req(data.additional_str2);
-                    response += "SUCCESS";
-                    
-                    std::vector<char> buff{response.begin(), response.end()};
-                    server.post_audio_track_req_response_to_server(data.item_idx, std::move(buff));
-                    break;
-                  }
-                }
-                response += "FAILURE";
-                    
+									audio_broadcast_server->submit_audio_req(data.additional_str2, data.item_idx, req->custom_info); // custom info is the thread_id
+									// above submits a request for a track in the addditional_str2 string
+									break;
+								}
+
+								std::string response = "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\nFAILURE";
+
                 std::vector<char> buff{response.begin(), response.end()};
                 server.post_audio_track_req_response_to_server(data.item_idx, std::move(buff));
                 break;
               }
-              case web_server::message_type::request_audio_list:
+              case web_server::message_type::request_audio_list: {
                 std::string response = 
                   "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n";
+                  
                 if(audio_server::server_id_map.count(data.additional_str)){
                     response += audio_server::instance(
                       audio_server::server_id_map[data.additional_str]
@@ -357,7 +352,19 @@ void central_web_server::run(){
                   server.post_audio_list_req_response_to_server(data.item_idx, std::move(buff));
                 }
                 break;
-            }
+              }
+              case web_server::message_type::request_audio_queue:
+                if(audio_server::server_id_map.count(data.additional_str)){
+                  audio_server *audio_broadcast_server = audio_server::instance(audio_server::server_id_map[data.additional_str]);
+									audio_broadcast_server->get_audio_queue(data.item_idx, req->custom_info); // custom info is the thread_id
+									break;
+								}
+
+								std::string response = "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\nFAILURE";
+
+                std::vector<char> buff{response.begin(), response.end()};
+                server.post_audio_track_req_response_to_server(data.item_idx, std::move(buff));
+						}
           }
         }
         break;
@@ -399,7 +406,10 @@ void central_web_server::audio_server_initialise_reads(audio_server &server){
   add_event_read_req(server.audio_list_update, central_web_server_event::AUDIO_SERVER_COMMUNICATION, server.id);
   add_event_read_req(server.file_request_fd, central_web_server_event::AUDIO_SERVER_COMMUNICATION, server.id);
   add_event_read_req(server.broadcast_fd, central_web_server_event::AUDIO_SERVER_COMMUNICATION, server.id);
-  server.request_audio_list(); // put in a request for the audio list
+	add_event_read_req(server.audio_req_response_fd, central_web_server_event::AUDIO_SERVER_COMMUNICATION, server.id);
+	add_event_read_req(server.get_queue_response_fd, central_web_server_event::AUDIO_SERVER_COMMUNICATION, server.id);
+
+	server.request_audio_list(); // put in a request for the audio list
 }
 
 void central_web_server::audio_server_read_req_handler(int readfd, int server_id, std::vector<char> &&buff){
@@ -424,27 +434,36 @@ void central_web_server::audio_server_event_req_handler(int eventfd, int server_
   if(eventfd == server->notify_audio_list_available){ // the initial data
     auto data = server->get_from_audio_file_list_data_queue();
 
-    for(const auto &file : data.file_list)
-      server->main_thread_state.file_set.insert(file);
-
     server->main_thread_state.slash_separated_audio_list = data.appropriate_str;
   }else if(eventfd == server->audio_list_update){ // updates the initial data
     auto data = server->get_from_audio_file_list_data_queue();
 
     if(data.addition){
       server->main_thread_state.slash_separated_audio_list += "/"+data.appropriate_str;
-      server->main_thread_state.file_set.insert(data.appropriate_str);
     }else{
       server->main_thread_state.slash_separated_audio_list = utility::remove_from_slash_string(server->main_thread_state.slash_separated_audio_list, data.appropriate_str);
-      server->main_thread_state.file_set.erase(data.appropriate_str);
     }
   }else if(eventfd == server->file_request_fd){
-    auto data = server->get_from_file_transfer_queue();
+    auto data = server->get_from_file_req_transfer_queue();
 
     int fd = open(data.filepath.c_str(), O_RDONLY);
     size_t size = utility::get_file_size(fd);
     server->main_thread_state.fd_to_filepath[fd] = data.filepath;
     add_read_req(fd, size, server_id); // add a read request for this file, setting the server_id correctly - need it to locate the server
+  }else if(eventfd == server->audio_req_response_fd){
+    auto data = server->get_from_audio_req_response_queue();
+    
+    std::string response_str = "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n" + data.str_data;
+    std::vector<char> buff{response_str.begin(), response_str.end()};
+
+    thread_data_container[data.thread_id].server.post_audio_track_req_response_to_server(data.client_idx, std::move(buff));
+  }else if(eventfd == server->get_queue_response_fd){
+    auto data = server->get_queue_response_from_data_queue();
+    
+    std::string response_str = "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\n" + data.file_queue;
+    std::vector<char> buff{response_str.begin(), response_str.end()};
+
+    thread_data_container[data.thread_id].server.post_audio_queue_req_response_to_server(data.client_idx, std::move(buff));
   }else if(eventfd == server->broadcast_fd){
     //
     // audio data broadcast
@@ -452,22 +471,23 @@ void central_web_server::audio_server_event_req_handler(int eventfd, int server_
     auto data = server->get_broadcast_data();
     auto &main_thread_state = server->main_thread_state;
 
-    auto ws_audio_data = make_ws_frame(data.audio_data, web_server::websocket_non_control_opcodes::text_frame);
-    main_thread_state.second_last_broadcast_audio_data = main_thread_state.last_broadcast_audio_data;
-    main_thread_state.last_broadcast_audio_data = ws_audio_data;
+    if(data.audio_data.size() > 0){
+      auto ws_audio_data = make_ws_frame(data.audio_data, web_server::websocket_non_control_opcodes::text_frame);
+      main_thread_state.second_last_broadcast_audio_data = main_thread_state.last_broadcast_audio_data;
+      main_thread_state.last_broadcast_audio_data = ws_audio_data;
 
-    auto item_audio_data = store.insert_item(std::move(ws_audio_data), num_threads);
+      auto item_audio_data = store.insert_item(std::move(ws_audio_data), num_threads);
 
-    // as mentioned above, broadcast_channel_id == server_id*2 when the subscribed endpoint is audio_broadcast, so we just send the server_id
-    for(server_data<T> &thread_data : thread_data_container)
-      thread_data.server.post_message_to_server_thread(
-        web_server::message_type::websocket_broadcast, 
-        reinterpret_cast<const char*>(item_audio_data.buffer.ptr),
-        item_audio_data.buffer.size,
-        item_audio_data.idx,
-        server_id*2
-      );
-    
+      // as mentioned above, broadcast_channel_id == server_id*2 when the subscribed endpoint is audio_broadcast, so we just send the server_id
+      for(server_data<T> &thread_data : thread_data_container)
+        thread_data.server.post_message_to_server_thread(
+          web_server::message_type::websocket_broadcast, 
+          reinterpret_cast<const char*>(item_audio_data.buffer.ptr),
+          item_audio_data.buffer.size,
+          item_audio_data.idx,
+          server_id*2
+        );
+    }
     
     //
     // metadata only broadcast

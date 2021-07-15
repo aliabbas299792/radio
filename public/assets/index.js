@@ -365,8 +365,8 @@ function formatTime(ms) { //give a formatted time string
 }
 
 function updateProgressBar() {
-  const currentTime = audio_metadata.time_in_audio()
-  const totalDuration = audio_metadata.total_length
+  const currentTime = Math.max(0, audio_metadata.time_in_audio())
+  const totalDuration = Math.max(0, audio_metadata.total_length)
 
   if (!totalDuration || !currentTime) return;
 

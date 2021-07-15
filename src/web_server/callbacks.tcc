@@ -2,6 +2,8 @@
 #include "../header/callbacks.h"
 #include "../header/utility.h"
 
+#include <curl/curl.h>
+
 #include <string>
 
 template<server_type T>
@@ -168,6 +170,10 @@ void read_cb(int client_idx, char *buffer, unsigned int length, tcp_tls_server::
     std::string path = &strtok_r(nullptr, " ", &saveptr)[1]; //if it's a valid request it should be a path
     free(temp_str);
 
+		static CURL *curl = curl_easy_init();
+		char *output = curl_easy_unescape(curl, path.c_str(), path.size(), 0);
+		path = output;
+		curl_free(output);
 
     //get callback, if unsuccesful then 404
     if( !is_GET ||

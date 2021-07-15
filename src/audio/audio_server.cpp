@@ -37,26 +37,35 @@ audio_server::audio_server(std::string dir_path, std::string name){ // not threa
 
   bool first_loop = true;
   while((file_data_ptr = readdir(audio_directory_ptr)) != nullptr){
-    auto file_name = file_data_ptr->d_name;
-    auto original_file_name = file_name;
+    auto file_name_ptr = file_data_ptr->d_name;
+
+    auto temp_file_name = strdup(file_name_ptr);
+    auto original_file_name = temp_file_name;
+
+    std::string filename = file_name_ptr;
 
     const char *file_extension{};
     const char *tmp_file_extension{};
-    while((tmp_file_extension = strtok_r(file_name, ".", &save_ptr)) != nullptr){
-      file_name = nullptr;
+    while((tmp_file_extension = strtok_r(file_name_ptr, ".", &save_ptr)) != nullptr){
+      file_name_ptr = nullptr;
       file_extension = tmp_file_extension;
     }
+
+    free(original_file_name);
     
     if(file_extension != nullptr && strcmp(file_extension, "opus") == 0){
-      audio_file_paths.push_back(dir_path + std::string(original_file_name) + ".opus"); // saves all the audio file paths
+      filename = filename.substr(0, filename.size() - 5);
 
-      audio_list.push_back(original_file_name);
-      file_set.insert(original_file_name);
+      audio_file_paths.push_back(dir_path + std::string(filename) + ".opus"); // saves all the audio file paths
+
+      audio_list.push_back(filename);
+      file_set.insert(filename);
+
       if(first_loop){
-        slash_separated_audio_list += std::string(original_file_name);
+        slash_separated_audio_list += std::string(filename);
         first_loop = false;
       }else{
-        slash_separated_audio_list += "/" + std::string(original_file_name);
+        slash_separated_audio_list += "/" + std::string(filename);
       }
     }
   }

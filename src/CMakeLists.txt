@@ -14,4 +14,4 @@ separate_arguments(SOURCE_FILE_LIST) # the string list is made into an actual li
 
 add_executable(webserver ${SOURCE_FILE_LIST}) # the list is passed here to actually set the source files
 # SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -D_GLIBCXX_DEBUG=1")
-target_link_libraries(webserver -luring -lcrypto -lwolfssl -lpthread)
+target_link_libraries(webserver -luring -lcrypto -lwolfssl -lpthread -lcurl)

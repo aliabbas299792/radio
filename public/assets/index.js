@@ -550,7 +550,7 @@ function refresh_voted_for_stuff() {
 }
 
 function update_vote_modal(){
-  vote_modal_tracks.innerHTML = current_station_data.tracks.map(track => `<div class='vote_track_item' onclick='vote_for("${track}")'>${track}</div>`).join("")
+  vote_modal_tracks.innerHTML = current_station_data.tracks.map(track => `<div class='vote_track_item' onclick='vote_for(this.innerText)'>${track}</div>`).join("")
 }
 
 function vote_for(track_name){

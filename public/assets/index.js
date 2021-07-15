@@ -465,8 +465,11 @@ function start_metadata_connection(){
 
     metadata = JSON.parse(msg.data)
 
-    if(metadata.start_offset == 0) // if the same shows up twice, time isn't reset
+    if(metadata.start_offset == 0){ // if the same shows up twice, time isn't reset
       update_playing(metadata.title, metadata.total_length);
+      refresh_voted_for_stuff(); // if for example the voting box is still open
+    }
+
     if(just_started)
       update_playing(metadata.title, metadata.total_length, true);
 
@@ -492,10 +495,16 @@ function stop_metadata_connection(){
 
 const current_station_data = {
   tracks: [],
+  queued: [],
   name: window.localStorage.getItem("station")
 };
 
 function set_station(name){
+  fetch(`/audio_list/${name}`).then(data => data.text()).then(res => {
+    current_station_data.tracks = res.split("/")
+    update_vote_modal()
+  })
+
   current_station_data.name = name
   window.localStorage.setItem("station", name)
 
@@ -517,3 +526,35 @@ window.addEventListener('click', e => {
   if(e.target.id != "volume_control_container" && e.target.id != "volume_control" && volume_control_container.style.opacity == 1)
     toggle_volume_control()
 })
+
+const vote_modal_tracks = document.getElementById("vote_tracks");
+
+document.getElementById("vote_btn").onclick = refresh_voted_for_stuff
+
+function refresh_voted_for_stuff() {
+  fetch(`/audio_queue/${current_station_data.name}`).then(res => res.text()).then(data => {
+    current_station_data.queued = data.split("/")?.filter(item => item != "")
+
+    for(const el of vote_modal_tracks.children){
+      el.innerHTML = el.innerHTML.replace(/ <b style="float:right">\(Position: \d+\)<\/b>$/, "")
+      if(current_station_data.queued.indexOf(el.innerHTML) != -1){
+        el.classList.add("voted_for");
+        el.classList.remove("vote_track_item");
+        el.innerHTML += ` <b style="float:right">(Position: ${current_station_data.queued.indexOf(el.innerHTML)+1})</b>`
+      }else{
+        el.classList.remove("voted_for");
+        el.classList.add("vote_track_item");
+      }
+    }
+  })
+}
+
+function update_vote_modal(){
+  vote_modal_tracks.innerHTML = current_station_data.tracks.map(track => `<div class='vote_track_item' onclick='vote_for("${track}")'>${track}</div>`).join("")
+}
+
+function vote_for(track_name){
+  fetch(`/audio_req/${current_station_data.name}/${track_name}`).then(res => res.text()).then(data => {
+    refresh_voted_for_stuff()
+  })
+}

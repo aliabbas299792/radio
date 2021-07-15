@@ -206,21 +206,58 @@ input[type=range]::-ms-thumb {
   padding: 10px 20px;
 }
 
+#modal_close {
+  color: #fff;
+}
+
 .btn-secondary:hover, .btn-secondary:focus {
   background: #5c636a70;
   border:none;
   box-shadow: none;
 }
 
-
+.modal-header {
+  border: 0;
+}
 
 
 
 
 #vote_audio_modal .modal-content {
-  background:rgba(100, 100, 100, 0.583);
+  border: 0;
+  background:rgba(100, 100, 100, 0.7);
+}
+
+#vote_tracks.modal-body{
+  padding: 0;
 }
 
 #vote_audio_modal_label {
   color: #fff;
+}
+
+.vote_track_item{
+  color:#fff;
+  padding:10px;
+  background:rgba(0, 0, 0, 0.4);
+  margin: 10px;
+  border-radius:5px;
+  transition: .2s ease all;
+}
+
+.vote_track_item:hover{
+  background:rgba(0, 0, 0, 0.6);
+  border-radius:1px;
+}
+
+.vote_track_item:active{
+  background:rgb(112 169 119 / 60%);
+}
+
+.voted_for{
+  background:#277950;
+  margin: 10px;
+  border-radius:5px;
+  color:#fff;
+  padding:10px;
 }

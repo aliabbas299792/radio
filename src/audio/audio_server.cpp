@@ -40,34 +40,21 @@ audio_server::audio_server(std::string name, std::string dir_path){ // not threa
   bool first_loop = true;
   while((file_data_ptr = readdir(audio_directory_ptr)) != nullptr){
     auto file_name_ptr = file_data_ptr->d_name;
+		std::string filename = file_name_ptr;
 
-    auto temp_file_name = strdup(file_name_ptr);
-    auto original_file_name = temp_file_name;
-
-    std::string filename = file_name_ptr;
-
-    const char *file_extension{};
-    const char *tmp_file_extension{};
-    while((tmp_file_extension = strtok_r(file_name_ptr, ".", &save_ptr)) != nullptr){
-      file_name_ptr = nullptr;
-      file_extension = tmp_file_extension;
-    }
-
-    free(original_file_name);
-    
-    if(file_extension != nullptr && strcmp(file_extension, "opus") == 0){
+    if(filename.size() > 5 && filename.substr(filename.size()-5, filename.size()) == ".opus"){
       filename = filename.substr(0, filename.size() - 5);
 
-      audio_file_paths.push_back(dir_path + std::string(filename) + ".opus"); // saves all the audio file paths
+      audio_file_paths.push_back(dir_path + filename + ".opus"); // saves all the audio file paths
 
       audio_list.push_back(filename);
       file_set.insert(filename);
 
       if(first_loop){
-        slash_separated_audio_list += std::string(filename);
+        slash_separated_audio_list += filename;
         first_loop = false;
       }else{
-        slash_separated_audio_list += "/" + std::string(filename);
+        slash_separated_audio_list += "/" + filename;
       }
     }
   }
@@ -139,27 +126,25 @@ void audio_server::run(){
           auto data = reinterpret_cast<inotify_event*>(ptr);
           event_name_length = data->len; // updates the amount to increment each time
           auto file_name = data->name;
-          auto original_file_name = file_name;
 
-          const char *file_extension{};
-          const char *tmp_file_extension{};
-          while((tmp_file_extension = strtok_r(file_name, ".", &strtok_saveptr)) != nullptr){
-            file_name = nullptr;
-            file_extension = tmp_file_extension;
-          }
+          std::string filename = file_name;
 
-          std::string file_name_str = std::string(original_file_name);
+					// if the filename is not *.opus then just continue to the next inotify event (if there is one)
+					if(filename.size() <= 5 || filename.substr(filename.size()-5, filename.size()) != ".opus")
+						continue;
+
+					filename = filename.substr(0, filename.size()-5); // remove the .opus extension
 
           if(data->mask & IN_CREATE || data->mask & IN_MOVED_TO){
-            slash_separated_audio_list += "/" + file_name_str;
-            audio_list.push_back(file_name_str);
-            post_audio_list_update(true, file_name_str); // we've added a file
-            file_set.insert(file_name_str);
+            slash_separated_audio_list += "/" + filename;
+            audio_list.push_back(filename);
+            post_audio_list_update(true, filename); // we've added a file
+            file_set.insert(filename);
           }else{
-            audio_list.erase(std::remove(audio_list.begin(), audio_list.end(), file_name_str), audio_list.end()); // remove the deleted file
-            slash_separated_audio_list = utility::remove_from_slash_string(slash_separated_audio_list, file_name_str);
-            post_audio_list_update(false, file_name_str); // we've removed a file
-            file_set.erase(file_name_str);
+            audio_list.erase(std::remove(audio_list.begin(), audio_list.end(), filename), audio_list.end()); // remove the deleted file
+            slash_separated_audio_list = utility::remove_from_slash_string(slash_separated_audio_list, filename);
+            post_audio_list_update(false, filename); // we've removed a file
+            file_set.erase(filename);
           }
         }
 

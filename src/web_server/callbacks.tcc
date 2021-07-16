@@ -88,11 +88,13 @@ void event_cb(tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the ev
     }
     case web_server::message_type::request_audio_track_response: {
       int client_idx = data.item_idx;
+      // std::cout << std::string(data.buff.data(), data.buff.size()) << "\n";
       tcp_server->write_connection(client_idx, std::move(data.buff));
       break;
     }
     case web_server::message_type::request_audio_queue_response: {
       int client_idx = data.item_idx;
+      // std::cout << std::string(data.buff.data(), data.buff.size()) << "\n";
       tcp_server->write_connection(client_idx, std::move(data.buff));
       break;
     }

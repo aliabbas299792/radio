@@ -99,7 +99,8 @@ struct audio_chunk {
 struct combined_data_chunk {
   std::string audio_data{};
   std::string metdata_only{};
-  combined_data_chunk(std::string &&audio_data, std::string &&metdata_only) : audio_data{audio_data}, metdata_only{metdata_only} {}
+  std::string track_name{};
+  combined_data_chunk(std::string &&audio_data, std::string &&metdata_only, std::string track_name) : audio_data{audio_data}, metdata_only{metdata_only}, track_name{track_name} {}
   combined_data_chunk() {}
 };
 
@@ -146,9 +147,6 @@ class audio_server {
 
   moodycamel::ReaderWriterQueue<combined_data_chunk> broadcast_queue{}; // the audio data chunk and the metadata only chunk
 
-  moodycamel::ReaderWriterQueue<audio_queue_data> get_currently_queued_audio_req_queue{};
-  moodycamel::ReaderWriterQueue<audio_queue_data> get_currently_queued_audio_response_queue{};
-
   std::string audio_server_name{};
   std::string dir_path = "";
 
@@ -178,7 +176,8 @@ class audio_server {
   std::thread audio_thread{};
   void run(); // run the audio server
 public:
-  audio_server(std::string dir_path, std::string audio_server_name);
+  audio_server(audio_server &&server) = default;
+  audio_server(std::string audio_server_name, std::string dir_path);
   int id = -1;
 
   static std::unordered_map<std::string, int> server_id_map;
@@ -210,13 +209,6 @@ public:
   audio_req_from_program get_from_audio_req_response_queue();
 	const int audio_req_fd = eventfd(0, 0); // should push data to the audio_req queue
 	const int audio_req_response_fd = eventfd(0, 0); // should push some data to the response queue
-
-  void get_audio_queue(int client_idx, int thread_id);
-	void get_audio_queue_handler(int client_idx, int thread_id); // should simply send back a response with the current queue (ordered)
-  audio_queue_data get_queue_req_from_data_queue();
-  audio_queue_data get_queue_response_from_data_queue();
-	const int get_queue_fd = eventfd(0, 0);
-	const int get_queue_response_fd = eventfd(0, 0);
   
   void send_file_request_to_program(const std::string &path);
   void send_file_back_to_audio_server(const std::string &path, std::vector<char> &&buff);
@@ -226,7 +218,7 @@ public:
 	const int file_ready_fd = eventfd(0, 0);
   
   combined_data_chunk get_broadcast_data();
-  void broadcast_to_central_server(std::string &&audio_data, std::string &&metadata_only);
+  void broadcast_to_central_server(std::string &&audio_data, std::string &&metadata_only, std::string track_name);
   const int broadcast_fd = eventfd(0, 0);
 
   // these are updated via the event loop on the main thread, rather than directly since could cause a data race
@@ -240,12 +232,15 @@ public:
 
     std::vector<char> last_broadcast_metadata_only{};
     std::vector<char> second_last_broadcast_metadata_only{};
+
+    std::deque<std::string> queued_audio{};
     
   } main_thread_state;
 
   ~audio_server(){ // this will be called as soon as it goes out of scope, unlike the web
     kill_server();
-    audio_thread.join(); // join its own audio thread
+    if(audio_thread.joinable())
+      audio_thread.join(); // join its own audio thread
   }
 };
 

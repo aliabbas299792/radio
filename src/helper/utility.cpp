@@ -47,8 +47,10 @@ namespace utility{
   uint64_t get_file_size(int file_fd){
     stat_struct file_stat;
 
-    if(fstat(file_fd, &file_stat) < 0)
+    if(fstat(file_fd, &file_stat) < 0){
+      std::cerr << "fd: " << file_fd << "\n";
       fatal_error("file stat");
+    }
     
     if(S_ISBLK(file_stat.st_mode)){
       uint64_t size_bytes;

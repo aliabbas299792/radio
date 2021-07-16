@@ -26,6 +26,8 @@ using namespace web_cache;
 
 extern std::chrono::system_clock::time_point time_start;
 constexpr int BROADCAST_INTERVAL_MS = 3000; // used for audio broadcasts, and any other if necessary, high enough to allow for the system to queue new audio for audio broadcasts
+const std::string default_plain_text_http_header{"HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nCache-Control: no-cache\r\n\r\n"};
+const std::string default_plain_json_http_header{"HTTP/1.0 200 OK\r\nContent-Type: application/json\r\nCache-Control: no-cache\r\n\r\n"};
 
 namespace web_server{
   struct receiving_data_info{
@@ -420,7 +422,10 @@ private:
   template<server_type T>
   void audio_server_event_req_handler(int eventfd, int server_id, std::vector<server_data<T>> &thread_data_container);
   void audio_server_read_req_handler(int readfd, int server_id, std::vector<char> &&buff);
-  void audio_server_initialise_reads(audio_server &server);
+  void audio_server_initialise_reads(audio_server *server);
+
+  // helper function
+  std::vector<std::pair<std::string, std::string>> tokenize_radio_list(std::string input);
 public:
   void start_server(const char *config_file_path);
   void add_event_read_req(int eventfd, central_web_server_event event, uint64_t custom_info = -1); // adds io_uring read request for the eventfd

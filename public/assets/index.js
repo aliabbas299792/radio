@@ -531,22 +531,31 @@ const vote_modal_tracks = document.getElementById("vote_tracks");
 
 document.getElementById("vote_btn").onclick = refresh_voted_for_stuff
 
-function refresh_voted_for_stuff() {
-  fetch(`/audio_queue/${current_station_data.name}`).then(res => res.text()).then(data => {
-    current_station_data.queued = data.split("/")?.filter(item => item != "")
+function refresh_voted_for_stuff(data = undefined) {
+  const func_body = (data) => {
+    current_station_data.queued = data.split("/")?.filter(item => item != "").reverse()
 
     for(const el of vote_modal_tracks.children){
       el.innerHTML = el.innerHTML.replace(/ <b style="float:right">\(Position: \d+\)<\/b>$/, "")
-      if(current_station_data.queued.indexOf(el.innerHTML) != -1){
+      
+      if(current_station_data.queued.indexOf(el.innerText) != -1){
         el.classList.add("voted_for");
         el.classList.remove("vote_track_item");
-        el.innerHTML += ` <b style="float:right">(Position: ${current_station_data.queued.indexOf(el.innerHTML)+1})</b>`
+        el.innerHTML += ` <b style="float:right">(Position: ${current_station_data.queued.indexOf(el.innerText)+1})</b>`
       }else{
         el.classList.remove("voted_for");
         el.classList.add("vote_track_item");
       }
     }
-  })
+  }
+
+  if(typeof data ==	"string" && data != ""){
+    func_body(data);
+  }else{
+    fetch(`/audio_queue/${current_station_data.name}`).then(res => res.text()).then(data => {
+      func_body(data);
+    })
+  }
 }
 
 function update_vote_modal(){
@@ -555,6 +564,7 @@ function update_vote_modal(){
 
 function vote_for(track_name){
   fetch(`/audio_req/${current_station_data.name}/${track_name}`).then(res => res.text()).then(data => {
-    refresh_voted_for_stuff()
+    if(data != "FAILURE")
+      refresh_voted_for_stuff(data)
   })
 }

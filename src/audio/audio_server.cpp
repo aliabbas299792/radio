@@ -12,7 +12,7 @@ int audio_server::max_id = 0;
 std::unordered_map<std::string, int> audio_server::server_id_map{};
 int audio_server::active_instances = 0;
 
-audio_server::audio_server(std::string dir_path, std::string name){ // not thread safe
+audio_server::audio_server(std::string name, std::string dir_path){ // not thread safe
   if(web_server::basic_web_server<server_type::TLS>::instance_exists || web_server::basic_web_server<server_type::NON_TLS>::instance_exists)
     utility::fatal_error("Audio servers must be initialised before web servers\n"); // self explanatory
 
@@ -28,9 +28,11 @@ audio_server::audio_server(std::string dir_path, std::string name){ // not threa
 
   DIR *audio_directory_ptr = opendir(dir_path.c_str());
 
-  if(audio_directory_ptr == nullptr)
+  if(audio_directory_ptr == nullptr){
+    std::cerr << "Dir: " << dir_path << "\n";
     utility::fatal_error("Couldn't open directory");
-  
+  }
+    
   dirent *file_data_ptr{};
 
   char *save_ptr{}; //for strtok_r
@@ -96,7 +98,6 @@ void audio_server::run(){
   fd_read_req(timerfd, audio_events::BROADCAST_TIMER);
 
 	fd_read_req(audio_req_fd, audio_events::AUDIO_REQUEST_FROM_PROGRAM);
-  fd_read_req(get_queue_fd, audio_events::AUDIO_QUEUE);
 
   current_audio_finish_time = std::chrono::system_clock::now();
   current_playback_time = current_audio_finish_time;
@@ -173,20 +174,14 @@ void audio_server::run(){
           audio_queue.push(req.str_data);
           currently_queued_audio.push_back(req.str_data);
 
-          submit_audio_req_response("SUCCESS", req.client_idx, req.thread_id);
+          submit_audio_req_response(req.str_data, req.client_idx, req.thread_id); // literally just sends back the title
         }else{
-          submit_audio_req_response("FAILURE", req.client_idx, req.thread_id);
+          submit_audio_req_response("//FAILURE", req.client_idx, req.thread_id); // putting // at the beginning since a title can't have a / character
         }
 
 				fd_read_req(audio_req_fd, audio_events::AUDIO_REQUEST_FROM_PROGRAM); //rearm the fd
 			  break;
 	  	}
-      case audio_events::AUDIO_QUEUE: {
-        auto data = get_queue_req_from_data_queue();
-        get_audio_queue_handler(data.client_idx, data.thread_id);
-        
-        fd_read_req(get_queue_fd, audio_events::AUDIO_QUEUE);
-      }
     }
     
     delete req;
@@ -263,12 +258,12 @@ void audio_server::broadcast_routine(){
     metadata_only_chunk["title"] = chunk.title;
     metadata_only_chunk["start_offset"] = chunk.start_offset;
     metadata_only_chunk["total_length"] = chunk.total_length;
-    broadcast_to_central_server(data_chunk.dump(), metadata_only_chunk.dump());
+    broadcast_to_central_server(data_chunk.dump(), metadata_only_chunk.dump(), chunk.title);
   }
 }
 
-void audio_server::broadcast_to_central_server(std::string &&audio_data, std::string &&metadata_only){
-  broadcast_queue.emplace(std::move(audio_data), std::move(metadata_only));
+void audio_server::broadcast_to_central_server(std::string &&audio_data, std::string &&metadata_only, std::string track_name){
+  broadcast_queue.emplace(std::move(audio_data), std::move(metadata_only), track_name);
   eventfd_write(broadcast_fd, 1);
 }
 
@@ -495,32 +490,5 @@ audio_req_from_program audio_server::get_from_audio_req_queue(){
 audio_req_from_program audio_server::get_from_audio_req_response_queue(){
   audio_req_from_program data{};
   audio_request_response_queue.try_dequeue(data);
-  return data;
-}
-
-void audio_server::get_audio_queue(int client_idx, int thread_id){
-  get_currently_queued_audio_req_queue.emplace(client_idx, thread_id);
-  eventfd_write(get_queue_fd, 1);
-}
-
-void audio_server::get_audio_queue_handler(int client_idx, int thread_id){
-  std::string queued_list{};
-
-  for(const auto &file : currently_queued_audio)
-    queued_list += file + "/";
-
-  get_currently_queued_audio_response_queue.emplace(client_idx, thread_id, queued_list);
-  eventfd_write(get_queue_response_fd, 1);
-}
-
-audio_queue_data audio_server::get_queue_req_from_data_queue(){
-  audio_queue_data data{};
-  get_currently_queued_audio_req_queue.try_dequeue(data);
-  return data;
-}
-
-audio_queue_data audio_server::get_queue_response_from_data_queue(){
-  audio_queue_data data{};
-  get_currently_queued_audio_response_queue.try_dequeue(data);
   return data;
 }

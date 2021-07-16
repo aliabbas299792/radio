@@ -10,6 +10,9 @@ bool basic_web_server<T>::instance_exists = false;
 template<server_type T>
 bool basic_web_server<T>::get_process(std::string &path, bool accept_bytes, const std::string& sec_websocket_key, int client_idx, std::string ip){
   char *path_temp = strdup(path.c_str());
+
+  // static int count = 0;
+  // std::cout << "got the req " << count++ << "\n";
   
   char *saveptr = nullptr;
   char *token = strtok_r(path_temp, "/", &saveptr);
@@ -20,6 +23,8 @@ bool basic_web_server<T>::get_process(std::string &path, bool accept_bytes, cons
     free(path_temp);
     return true;
   }
+
+  // not a websocket, so we deal with the path here
 
   std::vector<std::string> subdirs{};
 
@@ -38,7 +43,7 @@ bool basic_web_server<T>::get_process(std::string &path, bool accept_bytes, cons
   }
 
   if(subdir == "broadcast_metadata" && subdirs.size() == 0){
-    std::string metadata_str = "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\n\r\nBROADCAST_INTERVAL_MS: " + std::to_string(BROADCAST_INTERVAL_MS) + "\nSTART_TIME_S: " + std::to_string(std::chrono::time_point_cast<std::chrono::seconds>(time_start).time_since_epoch().count());
+    std::string metadata_str = default_plain_text_http_header + "BROADCAST_INTERVAL_MS: " + std::to_string(BROADCAST_INTERVAL_MS) + "\nSTART_TIME_S: " + std::to_string(std::chrono::time_point_cast<std::chrono::seconds>(time_start).time_since_epoch().count());
     std::vector<char> metadta{metadata_str.begin(), metadata_str.end()};
     tcp_server->write_connection(client_idx, std::move(metadta));
     return true;

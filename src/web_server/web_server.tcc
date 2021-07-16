@@ -190,10 +190,11 @@ void basic_web_server<T>::new_tcp_client(int client_idx){
 template<server_type T>
 void basic_web_server<T>::kill_client(int client_idx){ // be wary of this, I don't think this will cause issues, but maybe it's possible that a new websocket client is at that index already and could be an issue?
   web_cache.finished_with_item(client_idx, tcp_clients[client_idx]);
-  tcp_clients[client_idx].using_file = false;
 
   int ws_client_idx = tcp_clients[client_idx].ws_client_idx;
   all_websocket_connections.erase(ws_client_idx); //connection definitely closed now
+
+  tcp_clients[client_idx] = tcp_client(); // reset any info about the client
 
   for(auto &set : broadcast_ws_clients_tcp_client_idxs)
     set.erase(client_idx);

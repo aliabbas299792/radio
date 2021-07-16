@@ -31,5 +31,4 @@ Google Fonts (for the icons in the UI)<br>
 emsdk (https://github.com/emscripten-core/emsdk) (for the WebAssembly stuff)
 
 ## Known issues
-- Sometimes requests don't seem to get through, though they do get right to the point of writing to a connection, but they fail to write completely - not sure if it's due to my nginx reverse proxy, browser or the actual server
 - Sometimes it may crash when moving audio to a directory it is watching (due to a bad file descriptor - haven't seen it enough times to be able to find out where exactly the issue is)

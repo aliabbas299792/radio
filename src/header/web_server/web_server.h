@@ -26,8 +26,8 @@ using namespace web_cache;
 
 extern std::chrono::system_clock::time_point time_start;
 constexpr int BROADCAST_INTERVAL_MS = 3000; // used for audio broadcasts, and any other if necessary, high enough to allow for the system to queue new audio for audio broadcasts
-const std::string default_plain_text_http_header{"HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nCache-Control: no-cache\r\n\r\n"};
-const std::string default_plain_json_http_header{"HTTP/1.0 200 OK\r\nContent-Type: application/json\r\nCache-Control: no-cache\r\n\r\n"};
+const std::string default_plain_text_http_header{"HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n"};
+const std::string default_plain_json_http_header{"HTTP/1.0 200 OK\r\nContent-Type: application/json\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n"};
 
 namespace web_server{
   struct receiving_data_info{

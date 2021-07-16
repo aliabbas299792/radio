@@ -88,13 +88,13 @@ void event_cb(tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the ev
     }
     case web_server::message_type::request_audio_track_response: {
       int client_idx = data.item_idx;
-      // std::cout << std::string(data.buff.data(), data.buff.size()) << "\n";
+      // std::cout << "Writing (track req): " << data.buff.size() << ", client idx: " << client_idx << "\n";
       tcp_server->write_connection(client_idx, std::move(data.buff));
       break;
     }
     case web_server::message_type::request_audio_queue_response: {
       int client_idx = data.item_idx;
-      // std::cout << std::string(data.buff.data(), data.buff.size()) << "\n";
+      // std::cout << "Writing (queue req): " << data.buff.size() << ", client idx: " << client_idx << "\n";
       tcp_server->write_connection(client_idx, std::move(data.buff));
       break;
     }
@@ -204,7 +204,7 @@ void write_cb(int client_idx, int broadcast_additional_info, tcp_tls_server::ser
     if(--uses == 0)
       web_server->post_memory_release_message_to_program(web_server::message_type::broadcast_finished, item.buff_ptr, item.data_len, broadcast_additional_info);
   }
-
+  
   if(!web_server->websocket_process_write_cb(client_idx)) //if this is a websocket that is in the process of closing, it will let it close and then exit the function, otherwise we read from the function
     web_server->close_connection(client_idx); //for web requests you close the connection right after
 }

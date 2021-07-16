@@ -51,7 +51,7 @@ static struct {
 struct audio_req {
   audio_events event{};
   std::vector<char> buff{};
-  int fd{};
+  int fd = -1;
 };
 
 struct audio_file_list_data {

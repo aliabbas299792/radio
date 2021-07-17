@@ -29,6 +29,3 @@ Opus (https://github.com/xiph/opus) (compiled to WebAssembly)<br>
 Bootstrap 5.0 (for some modals/dropdowns in the UI)<br>
 Google Fonts (for the icons in the UI)<br>
 emsdk (https://github.com/emscripten-core/emsdk) (for the WebAssembly stuff)
-
-## Known issues
-- Sometimes it may crash when moving audio to a directory it is watching (due to a bad file descriptor - haven't seen it enough times to be able to find out where exactly the issue is)

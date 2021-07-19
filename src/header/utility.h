@@ -23,7 +23,7 @@ namespace utility {
   void sigint_handler(int sig_number); //handler used in main for handling SIGINT
   
   std::string replace(std::string s1, std::string s2, std::string pattern);
-  std::string remove_from_slash_string(std::string s1, std::string s2); // removes ABCD from `123/abc/ABCD/efg`, making `123/abc/efg`
+  std::string remove_from_slash_string(std::string slash_string, std::string remove_string); // removes ABCD from `123/abc/ABCD/efg`, making `123/abc/efg`
   
   void set_timerfd_interval(int timerfd, int ms);
   

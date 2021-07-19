@@ -378,7 +378,7 @@ void central_web_server::run(){
                 std::string response = default_plain_text_http_header;
                   
                 if(audio_server::server_id_map.count(data.additional_str)){
-                    response += audio_server::instance(
+                  response += audio_server::instance(
                       audio_server::server_id_map[data.additional_str]
                     )->main_thread_state.slash_separated_audio_list;
                   
@@ -435,7 +435,11 @@ void central_web_server::run(){
         break;
       case central_web_server_event::AUDIO_SERVER_COMMUNICATION: {
         add_event_read_req(req->fd, central_web_server_event::AUDIO_SERVER_COMMUNICATION, req->custom_info); // the eventfd is in req->fd
-        audio_server_event_req_handler<T>(req->fd, req->custom_info, thread_data_container); // the audio server ID is stored in req->custom_info
+        
+        auto efd_count = *reinterpret_cast<uint64_t*>(req->buff.data()); // we only write a value of 1 to the efd, so if greater than 1, multiple items in queue
+          
+        while(efd_count--) // possibly deal with multiple items in the queue
+          audio_server_event_req_handler<T>(req->fd, req->custom_info, thread_data_container); // the audio server ID is stored in req->custom_info
         break;
       }
     }
@@ -487,10 +491,13 @@ void central_web_server::audio_server_event_req_handler(int eventfd, int server_
     auto data = server->get_from_audio_file_list_data_queue();
 
     if(data.addition){
-      server->main_thread_state.slash_separated_audio_list += "/"+data.appropriate_str;
-    }else{
+      if(server->main_thread_state.slash_separated_audio_list != ""){
+        server->main_thread_state.slash_separated_audio_list += "/"+data.appropriate_str;
+      }else{
+        server->main_thread_state.slash_separated_audio_list = data.appropriate_str;
+      }
+    }else
       server->main_thread_state.slash_separated_audio_list = utility::remove_from_slash_string(server->main_thread_state.slash_separated_audio_list, data.appropriate_str);
-    }
   }else if(eventfd == server->file_request_fd){
     auto data = server->get_from_file_req_transfer_queue();
 
@@ -513,8 +520,6 @@ void central_web_server::audio_server_event_req_handler(int eventfd, int server_
     }
     
     std::string response_str = default_plain_text_http_header + data.str_data;
-
-    // std::cout << "clientidx: " << data.client_idx << ", threadid: " << data.thread_id << "\n";
 
     std::vector<char> buff{response_str.begin(), response_str.end()};
 

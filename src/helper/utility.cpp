@@ -12,16 +12,24 @@ namespace utility{
     perror(std::string("Fatal Error: " + error_message).c_str());
     exit(1);
   }
+
+  std::string regex_sanitise_string(std::string s1){
+    static std::regex specialChars { R"([-[\]{}()*+?.,\^$|#\s])" };
+    return std::regex_replace(s1, specialChars, R"(\$&)");
+  }
   
   std::string replace(std::string s1, std::string s2, std::string pattern){
     std::regex reg(pattern);
     return std::regex_replace(s1, reg, s2);
   }
 
-  std::string remove_from_slash_string(std::string s1, std::string s2){
-    std::string output = replace(s1, "", "^"+s2+"/");
-    output = replace(output, "", "/"+s2+"$");
-    return replace(output, "", "/"+s2);
+  std::string remove_from_slash_string(std::string slash_string, std::string remove_string){
+    remove_string = regex_sanitise_string(remove_string);
+
+    std::string output = replace(slash_string, "", "^"+remove_string+"/");
+    output = replace(output, "", "/"+remove_string+"$");
+    output = replace(output, "", "/"+remove_string);
+    return replace(output, "", "^"+remove_string+"$"); // in the case that the remove string was the last bit in the slash string
   }
 
   void set_timerfd_interval(int timerfd, int ms){

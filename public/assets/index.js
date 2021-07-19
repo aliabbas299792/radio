@@ -501,7 +501,7 @@ const current_station_data = {
 
 function set_station(name){
   fetch(`/audio_list/${name}`).then(data => data.text()).then(res => {
-    current_station_data.tracks = res.split("/")
+    current_station_data.tracks = res != "" ? res.split("/") : []
     update_vote_modal()
   })
 

@@ -6,6 +6,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "../utility.h"
+
 #include <sys/inotify.h>
 
 #include "common_structs_enums.h"
@@ -17,7 +19,7 @@ namespace web_cache {
     int next_item_idx = -1;
     int prev_item_idx = -1;
     bool outdated = false; //if true, then removed from cache
-    int watch{};
+    int watch = -1;
   };
 
   struct cache_fetch_item {
@@ -173,7 +175,7 @@ namespace web_cache {
 
     void finished_with_item(int client_idx, web_server::tcp_client &client){ //requires a pointer to the client object, for the using_file stuff - to ensure it's not decremented too many times
       if(client_idx < 0){ // for the off chance that an invalid client ID is supplied
-        std::cerr << "Client idx: " << client_idx << " ## " << client.using_file << "\n";
+        utility::log_helper_function(std::string(__func__) + " ## " + std::to_string(__LINE__) + " ## " + std::string(__FILE__) + " ## Client idx: " + std::to_string(client_idx) + " ## " + std::to_string(client.using_file), true);
         return;
       }
 

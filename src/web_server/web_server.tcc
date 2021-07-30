@@ -28,6 +28,20 @@ bool basic_web_server<T>::get_process(std::string &path, bool accept_bytes, cons
 
   std::vector<std::string> subdirs{};
 
+  std::cout << "web server client idx: " << client_idx << "\n";
+
+  std::cout << "ws clients (client idx, id): ";
+
+  for(const auto &client : websocket_clients)
+    std::cout << "(" << client.client_idx << ", " << client.id << ") ";
+  
+  std::cout << "\ntcp clients (ws client idx): ";
+
+  for(const auto &client : tcp_clients)
+    std::cout << "(" << client.ws_client_idx << ") ";
+  
+  std::cout << "\n\n";
+
   while((token = strtok_r(nullptr, "/", &saveptr)) != nullptr)
     subdirs.push_back(token);
   free(path_temp);

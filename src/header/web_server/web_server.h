@@ -41,8 +41,8 @@ namespace web_server{
     bool close = false; //should this socket be closed
     std::vector<char> websocket_frames{};
     receiving_data_info receiving_data{};
-    int id = 0; //in case we use io_uring later
-    int client_idx{}; //for the TCP/TLS layer
+    int id = -1; //in case we use io_uring later
+    int client_idx = -1; //for the TCP/TLS layer
   };
 
   struct message_post_data {
@@ -134,7 +134,7 @@ namespace web_server{
     std::vector<tcp_client> tcp_clients{}; //storing additional data related to the client_idxs passed to this layer
 
     //thread stuff
-    int central_communication_fd = eventfd(0, 0); // set in main thread
+    const int central_communication_fd = eventfd(0, 0); // set in main thread
     
     std::vector<broadcast_data_items> broadcast_data{}; // data from any broadcasts sent from the program thread
 
@@ -379,7 +379,7 @@ struct central_web_server_req {
   size_t size = -1; // if this is -1, buff_ptr is unused
 
   size_t progress_bytes{}; // how much has been read/written
-  int fd{};
+  int fd = -1;
 
   uint64_t custom_info = -1;
 };
@@ -401,10 +401,10 @@ private:
   template<server_type T>
   void run();
 
-  int num_threads = 0;
+  int num_threads = -1;
 
-  int event_fd = eventfd(0, 0);
-  int kill_server_efd = eventfd(0, 0);
+  const int event_fd = eventfd(0, 0);
+  const int kill_server_efd = eventfd(0, 0);
   
   io_uring ring;
 

@@ -259,7 +259,7 @@ void central_web_server::run(){
 
 
   // timer stuff - time is relative to process starting time
-  int timer_fd = timerfd_create(CLOCK_MONOTONIC, 0);
+  const int timer_fd = timerfd_create(CLOCK_MONOTONIC, 0);
   utility::set_timerfd_interval(timer_fd, 5000); // 5s timer that (fires first event immediately)
   add_timer_read_req(timer_fd); // arm the timer
 
@@ -362,7 +362,7 @@ void central_web_server::run(){
               case web_server::message_type::request_audio_track: {
                 if(audio_server::server_id_map.count(data.additional_str)){
                   audio_server *audio_broadcast_server = audio_server::instance(audio_server::server_id_map[data.additional_str]);
-                  // std::cout << "clientidx: " << data.item_idx << ", threadid: " << req->custom_info << "\n";
+                  // std::cout << "clientidx: " << data.item_idx << ", threadid: " << req->custom_info << std::endl;
 									audio_broadcast_server->submit_audio_req(data.additional_str2, data.item_idx, req->custom_info); // custom info is the thread_id
 									// above submits a request for a track in the addditional_str2 string
 									break;
@@ -406,7 +406,7 @@ void central_web_server::run(){
 
                   response += queue;
 
-                  // std::cout << "q: " << queue << "\n";
+                  // std::cout << "q: " << queue << std::endl;
 								}else{
                   response += "FAILURE";
                 }
@@ -502,7 +502,7 @@ void central_web_server::audio_server_event_req_handler(int eventfd, int server_
     auto data = server->get_from_file_req_transfer_queue();
 
     int fd = open(data.filepath.c_str(), O_RDONLY);
-    std::cout << "Now loading " << data.filepath << "\n";
+    std::cout << "Now loading " << data.filepath << std::endl;
     size_t size = utility::get_file_size(fd);
     server->main_thread_state.fd_to_filepath[fd] = data.filepath;
     add_read_req(fd, size, server_id); // add a read request for this file, setting the server_id correctly - need it to locate the server

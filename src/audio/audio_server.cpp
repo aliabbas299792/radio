@@ -29,7 +29,7 @@ audio_server::audio_server(std::string name, std::string dir_path){ // not threa
   DIR *audio_directory_ptr = opendir(dir_path.c_str());
 
   if(audio_directory_ptr == nullptr){
-    std::cerr << "Dir: " << dir_path << "\n";
+    utility::log_helper_function(std::string(__func__) + " ## " + std::to_string(__LINE__) + " ## " + std::string(__FILE__) + " ## Dir: " + dir_path, true);
     utility::fatal_error("Couldn't open directory");
   }
     
@@ -102,7 +102,7 @@ void audio_server::run(){
     switch(req->event){
       case audio_events::FILE_READY: {
         auto file_ready_data = get_from_file_transfer_queue();
-        std::cout << "File loaded: " << file_ready_data.filepath << "\n";
+        std::cout << "File loaded: " << file_ready_data.filepath << std::endl;
         process_audio(std::move(file_ready_data));
         fd_read_req(file_ready_fd, audio_events::FILE_READY);
         break;

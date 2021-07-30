@@ -79,6 +79,20 @@ void server_base<T>::start(){ //function to run the server
           req = nullptr; //don't want it to be deleted yet
         }
       }else{
+        std::cout << "active_connections (client idx): ";
+        for(const auto conn : active_connections)
+          std::cout << "(" << conn << ") ";
+        
+        std::cout << "\nclients (id, sockfd): ";
+        for(const auto client : clients)
+          std::cout << "(" << client.id << ", " << client.sockfd << ") ";
+        
+        std::cout << "freed idxs (client idx): ";
+        for(const auto idx : freed_indexes)
+          std::cout << "(" << idx << ") ";
+        
+        std::cout << "\n";
+
         static_cast<server<T>*>(this)->req_event_handler(req, cqe->res);
       }
 

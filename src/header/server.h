@@ -124,7 +124,7 @@ namespace tcp_tls_server {
   };
 
   struct client_base {
-    int id = -1;
+    int id = -1; // id is only used to ensure the connection is unique
     int sockfd = -1;
     std::queue<write_data> send_data{};
 

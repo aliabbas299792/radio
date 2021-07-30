@@ -105,16 +105,16 @@ struct combined_data_chunk {
 };
 
 struct audio_req_from_program {
-	int client_idx{};
+	int client_idx = -1;
 	std::string str_data{}; // either file name or response
-  int thread_id{}; // what thread is it from
+  int thread_id = -1; // what thread is it from
 	audio_req_from_program(std::string str_data, int client_idx, int thread_id) : client_idx(client_idx), str_data(str_data), thread_id(thread_id) {}
 	audio_req_from_program() {}
 };
 
 struct audio_queue_data {
-  int client_idx{};
-  int thread_id{};
+  int client_idx = -1;
+  int thread_id = -1;
   std::string file_queue{};
   audio_queue_data() {}
   audio_queue_data(int client_idx, int thread_id, std::string file_queue = "") : file_queue(file_queue), thread_id(thread_id), client_idx(client_idx) {} // file_queue is only used in the response, so optional

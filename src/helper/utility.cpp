@@ -13,6 +13,10 @@ namespace utility{
     exit(1);
   }
 
+  void log_helper_function(std::string msg, bool cerr_or_not){
+    std::cout << "[ " << __DATE__ << " | " << __TIME__ << " ]: " << msg << std::endl;
+  }
+
   std::string regex_sanitise_string(std::string s1){
     static std::regex specialChars { R"([-[\]{}()*+?.,\^$|#\s])" };
     return std::regex_replace(s1, specialChars, R"(\$&)");
@@ -56,7 +60,7 @@ namespace utility{
     stat_struct file_stat;
 
     if(fstat(file_fd, &file_stat) < 0){
-      std::cerr << "fd: " << file_fd << "\n";
+      utility::log_helper_function(std::string(__func__) + " ## " + std::to_string(__LINE__) + " ## " + std::string(__FILE__) + " ## fd: " + std::to_string(file_fd), true);
       fatal_error("file stat");
     }
     

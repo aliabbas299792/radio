@@ -83,15 +83,15 @@ void server_base<T>::start(){ //function to run the server
         for(const auto conn : active_connections)
           std::cout << "(" << conn << ") ";
         
-        std::cout << "\nclients (id, sockfd): ";
+        std::cout << std::endl << "clients (id, sockfd): ";
         for(const auto client : clients)
           std::cout << "(" << client.id << ", " << client.sockfd << ") ";
         
-        std::cout << "freed idxs (client idx): ";
+        std::cout << std::endl << "freed idxs (client idx): ";
         for(const auto idx : freed_indexes)
           std::cout << "(" << idx << ") ";
         
-        std::cout << "\n";
+        std::cout << std::endl;
 
         static_cast<server<T>*>(this)->req_event_handler(req, cqe->res);
       }

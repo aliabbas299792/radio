@@ -172,7 +172,7 @@ function playPCM(arrayBuffer){ //plays interleaved linear PCM with 16 bit, bit d
   buffer.getChannelData(1).set(floatsR);
 
   if(player.current_page_time < player.context.currentTime){ //ensures that the current time never lags behind context.currentTime
-    player.current_page_time = player.context.currentTime + 0.01;
+    player.current_page_time = player.context.currentTime + 0.05;
   }
 
   const source = player.context.createBufferSource();
@@ -302,12 +302,12 @@ function toggleAudio(force_pause){
       const audio_data = JSON.parse(msg.data)
       let prev_durations = 0;
       for(const page of audio_data.pages){
-        // i.e this is saying if the next audio page is up to 200ms before the current playback,
+        // i.e this is saying if the next audio page is up to 500ms before the current playback,
         // or more than 20 seconds in the past (i.e it's from the next track and the time has looped around)
         // then it's a valid page and play it, otherwise it is skipped
         // (this assumes that the tracks are at least around 30 seconds long)
         // this should prevent excessive drift from the metadata timing
-        if(audio_data.start_offset + prev_durations > audio_metadata.time_in_audio() - 200 
+        if(audio_data.start_offset + prev_durations > audio_metadata.time_in_audio() - 500 
           || audio_data.start_offset + prev_durations < audio_metadata.time_in_audio() - 20000){
           arr = new Uint8Array(page.buff)
           playMusic(arr)

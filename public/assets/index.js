@@ -217,6 +217,7 @@ async function playMusic(typedArrayCurrent){ //takes 1 packet of audio, decode, 
       [allocatedCurrentBufferPtr, typedArrayCurrentLength, allocatedPreviousBufferPtr, typedArrayPreviousLength, decodedCurrentBufferPtr]
     );
 
+    // slice creates a copy of the data, so we don't need this ptr after this bit, hence freed below
     const outputArrayBuffer = Module.HEAP8.slice(decodedCurrentBufferPtr, decodedCurrentBufferPtr + output_len).buffer;
 
     playPCM(outputArrayBuffer); //output array buffer contains decoded audio
@@ -225,6 +226,7 @@ async function playMusic(typedArrayCurrent){ //takes 1 packet of audio, decode, 
   } finally {
     Module._free(allocatedPreviousBufferPtr);
     Module._free(allocatedCurrentBufferPtr);
+    Module._free(decodedCurrentBufferPtr);
 
     player.typed_array_previous = typedArrayCurrent;
   }

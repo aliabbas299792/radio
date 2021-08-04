@@ -261,7 +261,7 @@ function toggleAudio(force_pause){
     player.gain_node.gain.linearRampToValueAtTime(0.00001, player.context.currentTime + 0.1)
     toggle_audio_timeout = setTimeout(() => {
       end_audio()
-    }, 1000)
+    }, 2000)
   }else{
     dummy_audio_el.play(); // stuff to control mediasession api
 
@@ -310,7 +310,7 @@ function toggleAudio(force_pause){
 }
 
 function resize(){
-  const dpi = window.devicePixelRatio * 2 //artificially making the DPI higher seems to make the canvas very high resolution
+  const dpi = window.devicePixelRatio * 1 //artificially making the DPI higher seems to make the canvas very high resolution
   const styleWidth = window.innerWidth;
   const styleHeight = (styleWidth * 9 / 21 > window.innerHeight * 0.4) ? window.innerHeight * 0.4 : styleWidth * 9 / 21; //keeps a 21:9 aspect ratio until it covers 40% of the vertical screen
 
@@ -328,7 +328,7 @@ window.addEventListener('resize', () => {
 function drawBars() {
   if(!player.analyser_node) return;
 
-  const bufferLength = Math.min(player.analyser_node.frequencyBinCount, canvas.width/20); // this way get a reasonable number of bars
+  const bufferLength = Math.min(player.analyser_node.frequencyBinCount, canvas.width/15); // this way get a reasonable number of bars
   const dataArray = new Uint8Array(bufferLength)
   player.analyser_node.getByteFrequencyData(dataArray)
 
@@ -365,10 +365,14 @@ function updateProgressBar() {
 
   const percentProgress = Math.max(0, Math.min(1, currentTime / totalDuration))
 
-  ctx.font = `${40*window.devicePixelRatio}px sans-serif`
+  let font_size = 23*window.devicePixelRatio;
+  if(window.devicePixelRatio != 1)
+    font_size = 20*window.devicePixelRatio;
+
+  ctx.font = `${font_size}px sans-serif`
 
   ctx.fillStyle = "rgba(255,255,255,0.7)"
-  ctx.fillText(`${formatTime(Math.min(totalDuration, currentTime))}/${formatTime(totalDuration)}`, 15, canvas.height - 40) //displays time and makes sure it's clamped to totalDuration (there are slight deviations)
+  ctx.fillText(`${formatTime(Math.min(totalDuration, currentTime))}/${formatTime(totalDuration)}`, 15, canvas.height - font_size) //displays time and makes sure it's clamped to totalDuration (there are slight deviations)
 
   ctx.beginPath()
   ctx.moveTo(0, canvas.height)

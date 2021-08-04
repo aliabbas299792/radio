@@ -115,35 +115,25 @@ void server<server_type::TLS>::tls_accept(int client_idx){
   wolfSSL_accept(ssl); //initialise the wolfSSL accept procedure
 }
 
-void server<server_type::TLS>::tls_accepted_routine(const int client_idx, bool accepted_in_accept_write){
+void server<server_type::TLS>::tls_accepted_routine(const int client_idx){
   auto &client = clients[client_idx];
-
-  auto &data = client.recv_data; //the data vector
-  const auto recvd_amount = data.size();
-  std::vector<char> buffer(READ_SIZE);
 
   if(accept_cb != nullptr) accept_cb(client_idx, this, custom_obj);
   uninitiated_connections.erase(client_idx);
   active_connections.insert(client_idx);
 
+  auto &data = client.recv_data; //the data vector
+  const auto recvd_amount = data.size();
+  std::vector<char> buffer(READ_SIZE);
   auto amount_read = wolfSSL_read(client.ssl, &buffer[0], READ_SIZE);
+
   //above will either add in a read request, or get whatever is left in the local buffer (as we might have got the HTTP request with the handshake)
-
-  // std::cout << "amount read: \e[92m" << amount_read << "\e[0m\n";
-
-  // int x = wolfSSL_accept(client.ssl);
-  // int y = wolfSSL_get_error(client.ssl, 0);
-  // char buffer2[80];
-  // wolfSSL_ERR_error_string(y, buffer2);
-  // std::cout << "we here ## " << buffer2 << " ## " << errno << "\n";
 
   client.recv_data = std::vector<char>{};
   if(amount_read > -1){
     clients[client_idx].read_req_active = false;
     if(read_cb != nullptr) read_cb(client_idx, &buffer[0], amount_read, this, custom_obj);
   }
-
-  // std::cout << client.recv_data.size() << " is the recv data size\n";
 }
 
 void server<server_type::TLS>::req_event_handler(request *&req, int cqe_res){
@@ -168,24 +158,8 @@ void server<server_type::TLS>::req_event_handler(request *&req, int cqe_res){
         auto *vec = &client.recv_data;
         vec->insert(vec->end(), &(req->read_data[0]), &(req->read_data[0]) + cqe_res);
       }
-      if(wolfSSL_accept(ssl) == 1){ //that means the connection was successfully established
-        if(accept_cb != nullptr) accept_cb(req->client_idx, this, custom_obj);
-        uninitiated_connections.erase(req->client_idx);
-        active_connections.insert(req->client_idx);
-
-        auto &data = client.recv_data; //the data vector
-        const auto recvd_amount = data.size();
-        std::vector<char> buffer(READ_SIZE);
-        auto amount_read = wolfSSL_read(ssl, &buffer[0], READ_SIZE);
-
-        //above will either add in a read request, or get whatever is left in the local buffer (as we might have got the HTTP request with the handshake)
-
-        client.recv_data = std::vector<char>{};
-        if(amount_read > -1){
-          clients[req->client_idx].read_req_active = false;
-          if(read_cb != nullptr) read_cb(req->client_idx, &buffer[0], amount_read, this, custom_obj);
-        }
-      }
+      if(wolfSSL_accept(ssl) == 1) //that means the connection was successfully established
+        tls_accepted_routine(req->client_idx);
       break;
     }
     case event_type::ACCEPT_WRITE: { //used only for when wolfSSL needs to write data during the TLS handshake

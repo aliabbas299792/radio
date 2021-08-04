@@ -276,7 +276,7 @@ namespace tcp_tls_server {
 
       friend class server_base;
       void tls_accept(int client_socket);
-      void tls_accepted_routine(const int client_idx, bool accepted_in_accept_write = false); // final variable is for the off chance that the last write was a success
+      void tls_accepted_routine(const int client_idx);
       
       //this takes the request pointer by reference, since for now, we are still using some manual memory management
       void req_event_handler(request *&req, int cqe_res); //the main event handler

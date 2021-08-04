@@ -530,6 +530,7 @@ window.addEventListener('click', e => {
 })
 
 const vote_modal_tracks = document.getElementById("vote_tracks");
+const vote_modal_header = document.getElementById("vote_modal_header");
 
 document.getElementById("vote_btn").onclick = refresh_voted_for_stuff
 
@@ -549,6 +550,8 @@ function refresh_voted_for_stuff(data = undefined) {
         el.classList.add("vote_track_item");
       }
     }
+
+    vote_modal_header.style.width = `${vote_modal_tracks.offsetWidth}px`; // makes sure the header is the correct size
   }
 
   if(typeof data ==	"string" && data != ""){

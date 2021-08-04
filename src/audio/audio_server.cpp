@@ -14,7 +14,7 @@ int audio_server::active_instances = 0;
 
 audio_server::audio_server(std::string name, std::string dir_path){ // not thread safe
   if(web_server::basic_web_server<server_type::TLS>::instance_exists || web_server::basic_web_server<server_type::NON_TLS>::instance_exists)
-    utility::fatal_error("Audio servers must be initialised before web servers\n"); // self explanatory
+    utility::fatal_error("Audio servers must be initialised before web servers"); // self explanatory
 
   audio_server_name = utility::to_web_name(name); // only uses the web safe name
   id = max_id++; // (also acts as an index into the vector below)
@@ -373,7 +373,7 @@ void audio_server::process_audio(file_transfer_data &&data){
       chunks_of_audio.push_back(chunk);
   }
 
-  std::cout << "" << std::floor(float(duration_of_audio)/60000.0) << "m " << std::round((float(duration_of_audio)/60000.0 - std::floor(float(duration_of_audio)/60000.0))*60) << "s is the duration\n";
+  std::cout << "" << std::floor(float(duration_of_audio)/60000.0) << "m " << std::round((float(duration_of_audio)/60000.0 - std::floor(float(duration_of_audio)/60000.0))*60) << "s is the duration" << std::endl;
 
   current_audio_finish_time += std::chrono::milliseconds(duration_of_audio);
   currently_processing_audio = ""; // we've processed it

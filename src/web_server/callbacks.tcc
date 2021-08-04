@@ -19,6 +19,8 @@ template<server_type T>
 void close_cb(int client_idx, int broadcast_additional_info, tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the close callback
   const auto web_server = (basic_web_server<T>*)custom_obj;
 
+  std::cout << "\t\t\t\t\t\t\t\e[92mkilled (client idx): " << client_idx << "\e[0m" << std::endl;
+
   if(broadcast_additional_info != -1){ // only a broadcast if this is not -1
     auto &item = web_server->broadcast_data[broadcast_additional_info];
     auto &uses = item.uses;
@@ -34,7 +36,7 @@ void event_cb(tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the ev
   const auto web_server = (basic_web_server<T>*)custom_obj;
   const auto &client_idxs = web_server->active_websocket_connections_client_idxs;
 
-  std::cout << "got something from the central server\n";
+  // std::cout << "got something from the central server" << std::endl;
 
   auto data = web_server->get_from_to_server_queue();
   switch(data.msg_type){
@@ -80,6 +82,7 @@ void event_cb(tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the ev
     }
     case web_server::message_type::request_station_list_response: {
       int client_idx = data.item_idx;
+      // std::cout << "Writing (track req): " << data.buff.size() << ", client idx: " << client_idx << std::endl;
       tcp_server->write_connection(client_idx, std::move(data.buff));
       break;
     }
@@ -90,13 +93,13 @@ void event_cb(tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the ev
     }
     case web_server::message_type::request_audio_track_response: {
       int client_idx = data.item_idx;
-      std::cout << "Writing (track req): " << data.buff.size() << ", client idx: " << client_idx << "\n";
+      // std::cout << "Writing (track req): " << data.buff.size() << ", client idx: " << client_idx << std::endl;
       tcp_server->write_connection(client_idx, std::move(data.buff));
       break;
     }
     case web_server::message_type::request_audio_queue_response: {
       int client_idx = data.item_idx;
-      std::cout << "Writing (queue req): " << data.buff.size() << ", client idx: " << client_idx << "\n";
+      // std::cout << "Writing (queue req): " << data.buff.size() << ", client idx: " << client_idx << std::endl;
       tcp_server->write_connection(client_idx, std::move(data.buff));
       break;
     }
@@ -208,9 +211,9 @@ void write_cb(int client_idx, int broadcast_additional_info, tcp_tls_server::ser
   }
   
   if(!web_server->websocket_process_write_cb(client_idx)){ //if this is a websocket that is in the process of closing, it will let it close and then exit the function, otherwise we read from the function
-    std::cout << "closing client connection " << client_idx << "\n";
+    std::cout << "closing client connection " << client_idx << std::endl;
     web_server->close_connection(client_idx); //for web requests you close the connection right after
   }else{
-    std::cout << "not closing client connection: " << client_idx << "\n";
+    std::cout << "not closing client connection: " << client_idx << std::endl;
   }
 }

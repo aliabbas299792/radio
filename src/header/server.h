@@ -60,7 +60,7 @@ namespace tcp_tls_server {
     // fields used for any request
     event_type event;
     int client_idx = -1;
-    int ID = -1;
+    int ID = 0;
 
     // fields used for write requests
     size_t written{}; //how much written so far
@@ -124,7 +124,7 @@ namespace tcp_tls_server {
   };
 
   struct client_base {
-    int id = -1; // id is only used to ensure the connection is unique
+    int id = 0; // id is only used to ensure the connection is unique
     int sockfd = -1;
     std::queue<write_data> send_data{};
 
@@ -172,6 +172,7 @@ namespace tcp_tls_server {
       void custom_read_req_continued(request *req, size_t last_read); //to finish off partial reads
       
       int setup_client(int client_idx);
+      void clean_up_client_resources(int client_idx, bool trigger_callback = true); // used for cleaning up client resources
 
       void event_read(int event_fd, event_type event); //will set a read request for the eventfd
 
@@ -275,11 +276,13 @@ namespace tcp_tls_server {
 
       friend class server_base;
       void tls_accept(int client_socket);
+      void tls_accepted_routine(const int client_idx, bool accepted_in_accept_write = false); // final variable is for the off chance that the last write was a success
       
       //this takes the request pointer by reference, since for now, we are still using some manual memory management
       void req_event_handler(request *&req, int cqe_res); //the main event handler
 
       WOLFSSL_CTX *wolfssl_ctx = nullptr;
+      std::unordered_set<int> uninitiated_connections{}; // for connections which have finished not yet finished negotiating (so not yet in active_connections)
 
       // for storing and accessing all of the TLS servers on all threads
       static std::vector<server<server_type::TLS>*> tls_servers;

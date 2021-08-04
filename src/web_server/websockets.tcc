@@ -131,7 +131,6 @@ int basic_web_server<T>::new_ws_client(int client_idx){
     auto &freed_client = websocket_clients[index];
 
     const auto new_id = (freed_client.id + 1) % 1000000; //ID loops every 1000000
-    freed_client = ws_client();
     freed_client.id = new_id;
   }else{
     websocket_clients.emplace_back(); //otherwise give a new one

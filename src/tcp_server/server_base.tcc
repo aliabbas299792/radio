@@ -41,21 +41,7 @@ void server_base<T>::start(){ //function to run the server
           if(req->event == event_type::WRITE || req->event == event_type::ACCEPT_WRITE)
             client.num_write_reqs--; // a write operation failed, decrement the number of active write operaitons for this client
 
-          if(client.num_write_reqs == 0){
-            while(client.send_data.size()){
-              auto &send_data = client.send_data.front();
-              
-              int broadcast_additional_info = send_data.broadcast ? send_data.custom_info : -1;
-              if(close_cb != nullptr) close_cb(req->client_idx, broadcast_additional_info, static_cast<server<T>*>(this), custom_obj); // might have had multiple broadcasts
-
-              client.send_data.pop();
-            }
-
-            if(client.send_data.size() == 0) // there was no send_data and no broadcast, so we close it once here
-              if(close_cb != nullptr) close_cb(req->client_idx, -1, static_cast<server<T>*>(this), custom_obj);
-            
-            static_cast<server<T>*>(this)->close_connection(req->client_idx); //making sure to remove any data relating to it as well
-          }
+          static_cast<server<T>*>(this)->close_connection(req->client_idx); //making sure to remove any data relating to it as well
         }
       }else if(req->event == event_type::KILL) {
         io_uring_queue_exit(&ring);
@@ -83,15 +69,15 @@ void server_base<T>::start(){ //function to run the server
         for(const auto conn : active_connections)
           std::cout << "(" << conn << ") ";
         
-        std::cout << std::endl << "clients (id, sockfd): ";
-        for(const auto client : clients)
-          std::cout << "(" << client.id << ", " << client.sockfd << ") ";
+        std::cout << std::endl << "clients (client idx, id, sockfd): ";
+        for(int i = 0; i < clients.size(); i++)
+          std::cout << "(" << i << ", " << clients[i].id << ", " << clients[i].sockfd << ") ";
         
         std::cout << std::endl << "freed idxs (client idx): ";
         for(const auto idx : freed_indexes)
           std::cout << "(" << idx << ") ";
         
-        std::cout << std::endl;
+        std::cout << std::endl << std::endl;
 
         static_cast<server<T>*>(this)->req_event_handler(req, cqe->res);
       }
@@ -100,6 +86,24 @@ void server_base<T>::start(){ //function to run the server
       io_uring_cqe_seen(&ring, cqe); //mark this CQE as seen
     }
   }
+}
+
+template<server_type T>
+void server_base<T>::clean_up_client_resources(int client_idx, bool trigger_callback){ // this should be called any place close_cb would be called normally (i.e basically only in one of the close_connection functions)
+  auto &client = clients[client_idx];
+
+  while(client.send_data.size()){ // if they had anything left to write, dispose of it
+    auto &send_data = client.send_data.front();
+    
+    int broadcast_additional_info = send_data.broadcast ? send_data.custom_info : -1;
+    if(close_cb != nullptr && trigger_callback) close_cb(client_idx, broadcast_additional_info, static_cast<server<T>*>(this), custom_obj); // might have had multiple broadcasts
+
+    std::cout << std::string(send_data.get_ptr_and_size().buff, send_data.get_ptr_and_size().length) << " was deleted msg\n";
+    client.send_data.pop();
+  }
+
+  if(client.send_data.size() == 0) // there was no send_data and no broadcast, so we close it once here
+    if(close_cb != nullptr && trigger_callback) close_cb(client_idx, -1, static_cast<server<T>*>(this), custom_obj);
 }
 
 template<server_type T>

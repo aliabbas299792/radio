@@ -28,19 +28,19 @@ bool basic_web_server<T>::get_process(std::string &path, bool accept_bytes, cons
 
   std::vector<std::string> subdirs{};
 
-  std::cout << "web server client idx: " << client_idx << "\n";
+  // std::cout << "web server client idx: " << client_idx << std::endl;
 
-  std::cout << "ws clients (client idx, id): ";
+  // std::cout << "ws clients (client idx, id): ";
 
-  for(const auto &client : websocket_clients)
-    std::cout << "(" << client.client_idx << ", " << client.id << ") ";
+  // for(const auto &client : websocket_clients)
+  //   std::cout << "(" << client.client_idx << ", " << client.id << ") ";
   
-  std::cout << "\ntcp clients (ws client idx): ";
+  // std::cout << std::endl << "tcp clients (ws client idx): ";
 
-  for(const auto &client : tcp_clients)
-    std::cout << "(" << client.ws_client_idx << ") ";
+  // for(const auto &client : tcp_clients)
+  //   std::cout << "(" << client.ws_client_idx << ") ";
   
-  std::cout << "\n\n";
+  // std::cout << std::endl << std::endl;
 
   while((token = strtok_r(nullptr, "/", &saveptr)) != nullptr)
     subdirs.push_back(token);
@@ -57,8 +57,9 @@ bool basic_web_server<T>::get_process(std::string &path, bool accept_bytes, cons
   }
 
   if(subdir == "broadcast_metadata" && subdirs.size() == 0){
-    std::string metadata_str = default_plain_text_http_header + "BROADCAST_INTERVAL_MS: " + std::to_string(BROADCAST_INTERVAL_MS) + "\nSTART_TIME_S: " + std::to_string(std::chrono::time_point_cast<std::chrono::seconds>(time_start).time_since_epoch().count());
+    std::string metadata_str = default_plain_text_http_header + "BROADCAST_INTERVAL_MS: " + std::to_string(BROADCAST_INTERVAL_MS) + "\nSTART_TIME_S: " + std::to_string(std::chrono::time_point_cast<std::chrono::seconds>(time_start).time_since_epoch().count()) + "\r\n";
     std::vector<char> metadta{metadata_str.begin(), metadata_str.end()};
+    // std::cout << "writing broadcast metadata... " << client_idx << "\n";
     tcp_server->write_connection(client_idx, std::move(metadta));
     return true;
   }

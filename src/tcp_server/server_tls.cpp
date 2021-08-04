@@ -1,6 +1,7 @@
 #include "../header/server.h"
 #include "../header/utility.h"
 
+#include <sys/socket.h>
 #include <thread>
 
 using namespace tcp_tls_server;
@@ -17,16 +18,22 @@ void server<server_type::TLS>::kill_all_servers() {
 
 void server<server_type::TLS>::close_connection(int client_idx) {
   auto &client = clients[client_idx];
-  if(client.num_write_reqs == 0 && active_connections.count(client_idx)){
+  
+  std::cout << "\e[96mnum writes: " << client.num_write_reqs << " ## " << active_connections.count(client_idx) << "\n\e[0m";
+  if(client.num_write_reqs == 0 && (active_connections.count(client_idx) || uninitiated_connections.count(client_idx))){
+    clean_up_client_resources(client_idx, active_connections.count(client_idx)); // only trigger the close callback if it is actually active
+    
     wolfSSL_shutdown(client.ssl);
     wolfSSL_free(client.ssl);
 
-    close(client.sockfd);
-
     client.ssl = nullptr; //so that if we try to close multiple times, free() won't crash on it, inside of wolfSSL_free()
-    active_connections.erase(client_idx);
     client.send_data = {}; //free up all the data we might have wanted to send
 
+    shutdown(client.sockfd, SHUT_RDWR);
+    close(client.sockfd);
+
+    uninitiated_connections.erase(client_idx);
+    active_connections.erase(client_idx);
     freed_indexes.insert(freed_indexes.end(), client_idx);
   }
 }
@@ -108,10 +115,43 @@ void server<server_type::TLS>::tls_accept(int client_idx){
   wolfSSL_accept(ssl); //initialise the wolfSSL accept procedure
 }
 
+void server<server_type::TLS>::tls_accepted_routine(const int client_idx, bool accepted_in_accept_write){
+  auto &client = clients[client_idx];
+
+  auto &data = client.recv_data; //the data vector
+  const auto recvd_amount = data.size();
+  std::vector<char> buffer(READ_SIZE);
+
+  if(accept_cb != nullptr) accept_cb(client_idx, this, custom_obj);
+  uninitiated_connections.erase(client_idx);
+  active_connections.insert(client_idx);
+
+  auto amount_read = wolfSSL_read(client.ssl, &buffer[0], READ_SIZE);
+  //above will either add in a read request, or get whatever is left in the local buffer (as we might have got the HTTP request with the handshake)
+
+  // std::cout << "amount read: \e[92m" << amount_read << "\e[0m\n";
+
+  // int x = wolfSSL_accept(client.ssl);
+  // int y = wolfSSL_get_error(client.ssl, 0);
+  // char buffer2[80];
+  // wolfSSL_ERR_error_string(y, buffer2);
+  // std::cout << "we here ## " << buffer2 << " ## " << errno << "\n";
+
+  client.recv_data = std::vector<char>{};
+  if(amount_read > -1){
+    clients[client_idx].read_req_active = false;
+    if(read_cb != nullptr) read_cb(client_idx, &buffer[0], amount_read, this, custom_obj);
+  }
+
+  // std::cout << client.recv_data.size() << " is the recv data size\n";
+}
+
 void server<server_type::TLS>::req_event_handler(request *&req, int cqe_res){
   switch(req->event){
     case event_type::ACCEPT: {
       auto client_idx = setup_client(cqe_res);
+      uninitiated_connections.insert(client_idx);
+
       add_tcp_accept_req();
       tls_accept(client_idx);
       break;
@@ -130,6 +170,7 @@ void server<server_type::TLS>::req_event_handler(request *&req, int cqe_res){
       }
       if(wolfSSL_accept(ssl) == 1){ //that means the connection was successfully established
         if(accept_cb != nullptr) accept_cb(req->client_idx, this, custom_obj);
+        uninitiated_connections.erase(req->client_idx);
         active_connections.insert(req->client_idx);
 
         auto &data = client.recv_data; //the data vector
@@ -151,7 +192,7 @@ void server<server_type::TLS>::req_event_handler(request *&req, int cqe_res){
       auto &client = clients[req->client_idx];
       client.num_write_reqs--; // decrement number of active write requests
       client.accept_last_written = cqe_res; //this is the amount that was last written, used in the tls_write callback
-      wolfSSL_accept(client.ssl); //call accept again
+      std::cout << "accepted on wrong: \e[92m" << wolfSSL_accept(client.ssl) << "\e[0m\n"; //call accept again
       break;
     }
     case event_type::WRITE: { //used for generally writing over TLS

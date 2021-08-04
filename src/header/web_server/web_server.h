@@ -41,7 +41,7 @@ namespace web_server{
     bool close = false; //should this socket be closed
     std::vector<char> websocket_frames{};
     receiving_data_info receiving_data{};
-    int id = -1; //in case we use io_uring later
+    int id = 0; //in case we use io_uring later
     int client_idx = -1; //for the TCP/TLS layer
   };
 
@@ -159,6 +159,7 @@ namespace web_server{
       data.msg_type = message_type::request_station_list;
       data.item_idx = client_idx;
       to_program_queue.enqueue(std::move(data));
+      // std::cout << "\t\tsize to program: \e[34m" << to_program_queue.size_approx() << "\e[0m" << std::endl;
 
       eventfd_write(central_communication_fd, 1); //notify the program thread using our eventfd
     }
@@ -170,6 +171,7 @@ namespace web_server{
       data.item_idx = client_idx;
       data.buff = str_data;
       to_server_queue.enqueue(std::move(data));
+      // std::cout << "size to server: \e[34m" << to_server_queue.size_approx() << "\e[0m" << std::endl;
       tcp_server->notify_event();
     }
 
@@ -182,6 +184,7 @@ namespace web_server{
       data.item_idx = item_idx;
       data.additional_info = additional_info;
       to_server_queue.enqueue(std::move(data));
+      // std::cout << "size to server: \e[34m" << to_server_queue.size_approx() << "\e[0m" << std::endl;
       tcp_server->notify_event();
     }
 
@@ -194,6 +197,7 @@ namespace web_server{
       data.item_idx = item_idx;
       data.additional_info = additional_info;
       to_program_queue.enqueue(std::move(data));
+      // std::cout << "\t\tsize to program: \e[34m" << to_program_queue.size_approx() << "\e[0m" << std::endl;
 
       eventfd_write(central_communication_fd, 1); //notify the program thread using our eventfd
     }
@@ -206,6 +210,7 @@ namespace web_server{
       data.additional_info = ws_client_id;
       data.additional_str = station;
       to_program_queue.enqueue(std::move(data));
+      // std::cout << "\t\tsize to program: \e[34m" << to_program_queue.size_approx() << "\e[0m" << std::endl;
       
       eventfd_write(central_communication_fd, 1); //notify the program thread using our eventfd
     }
@@ -219,6 +224,7 @@ namespace web_server{
       data.buff_ptr = reinterpret_cast<const char*>(broadcast_channel_id); // we are storing the broadcast_channel_id in the pointer place becasue we need to, think of it as 'pointing' to the correct broadcast channel
       data.buff = std::move(buff);
       to_server_queue.enqueue(std::move(data));
+      // std::cout << "size to server: \e[34m" << to_server_queue.size_approx() << "\e[0m" << std::endl;
       tcp_server->notify_event();
     }
     
@@ -229,6 +235,7 @@ namespace web_server{
       data.item_idx = client_idx;
       data.additional_str = station;
       to_program_queue.enqueue(std::move(data));
+      // std::cout << "\t\tsize to program: \e[34m" << to_program_queue.size_approx() << "\e[0m" << std::endl;
 
       eventfd_write(central_communication_fd, 1);
     }
@@ -240,6 +247,7 @@ namespace web_server{
       data.item_idx = client_idx;
       data.buff = std::move(buff);
       to_server_queue.enqueue(std::move(data));
+      // std::cout << "size to server: \e[34m" << to_server_queue.size_approx() << "\e[0m" << std::endl;
       tcp_server->notify_event();
     }
     
@@ -251,6 +259,7 @@ namespace web_server{
       data.additional_str = station;
       data.additional_str2 = track_name;
       to_program_queue.enqueue(std::move(data));
+      // std::cout << "\t\tsize to program: \e[34m" << to_program_queue.size_approx() << "\e[0m" << std::endl;
 
       eventfd_write(central_communication_fd, 1);
     }
@@ -262,6 +271,7 @@ namespace web_server{
       data.item_idx = client_idx;
       data.buff = std::move(buff);
       to_server_queue.enqueue(std::move(data));
+      // std::cout << "size to server: \e[34m" << to_server_queue.size_approx() << "\e[0m" << std::endl;
       tcp_server->notify_event();
     }
     
@@ -272,6 +282,7 @@ namespace web_server{
       data.item_idx = client_idx;
       data.additional_str = station;
       to_program_queue.enqueue(std::move(data));
+      // std::cout << "\t\tsize to program: \e[34m" << to_program_queue.size_approx() << "\e[0m" << std::endl;
 
       eventfd_write(central_communication_fd, 1);
     }
@@ -283,18 +294,21 @@ namespace web_server{
       data.item_idx = client_idx;
       data.buff = std::move(buff);
       to_server_queue.enqueue(std::move(data));
+      // std::cout << "size to server: \e[34m" << to_server_queue.size_approx() << "\e[0m" << std::endl;
       tcp_server->notify_event();
     }
     
     message_post_data get_from_to_program_queue(){ // so called from main program thread
       message_post_data data{};
       to_program_queue.try_dequeue(data);
+      // std::cout << "\t\tsize to program: \e[34m" << to_program_queue.size_approx() << "\e[0m" << std::endl;
       return data;
     }
 
     message_post_data get_from_to_server_queue(){ // so called from associated server thread
       message_post_data data{};
       to_server_queue.try_dequeue(data);
+      // std::cout << "size to server: \e[34m" << to_server_queue.size_approx() << "\e[0m" << std::endl;
       return data;
     }
 

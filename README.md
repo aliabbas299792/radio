@@ -29,3 +29,6 @@ Opus (https://github.com/xiph/opus) (compiled to WebAssembly)<br>
 Bootstrap 5.0 (for some modals/dropdowns in the UI)<br>
 Google Fonts (for the icons in the UI)<br>
 emsdk (https://github.com/emscripten-core/emsdk) (for the WebAssembly stuff)
+
+## Known issues
+TLS doesn't work consistently, this is because [this](https://github.com/aliabbas299792/radio/blob/78e939c55d18215390a85110976086ce5e092a9e/src/tcp_server/server_tls.cpp#L169) line in `src/tcp_server/server_tls.cpp` can successfully accept a TLS connection, but there is no handler for it, and it appears that adding a simple handler like the one directly below uncovers a couple more bugs which I'm not going to investigate further for now (these all prevent the page from loading consistently, if at all).

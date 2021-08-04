@@ -44,17 +44,8 @@ const to_presentable_time_seconds = s => {
 }
 
 let broadcast_metadata = undefined;
-fetch("/broadcast_metadata").then(data => data.text()).then(metadata => {
-  broadcast_metadata = Object.fromEntries(metadata.replace(/ /g, "").split("\n").map(item => [item.split(":")[0], Number(item.split(":")[1])]));
-  update_broadcast_time(); // start updating the broadcast time
-})
-
-let stations_list = undefined;
-fetch("/station_list").then(data => data.json()).then(stations => {
-  stations_list = stations["stations"];
-  populate_stations_dropdown();
-});
 const stations_el = document.getElementById("stations");
+let stations_list = undefined;
 
 function populate_stations_dropdown(){
   const dropdown_items_el = [...stations_el.children].filter(item => item.getAttribute('class') == 'dropdown-menu')[0];
@@ -448,6 +439,15 @@ window.addEventListener("load", () => {
   player.current_volume = window.localStorage.getItem("volume") ? Number(window.localStorage.getItem("volume")) : 1 // get volume from the local storage
   volume_control.value = Math.max(1, player.current_volume*100) // sets the volume_control element's value
 
+  fetch("/broadcast_metadata").then(data => data.text()).then(metadata => {
+    broadcast_metadata = Object.fromEntries(metadata.replace(/ /g, "").split("\n").map(item => [item.split(":")[0], Number(item.split(":")[1])]));
+    update_broadcast_time(); // start updating the broadcast time
+  })
+  
+  fetch("/station_list").then(data => data.json()).then(stations => {
+    stations_list = stations["stations"];
+    populate_stations_dropdown();
+  });
   
   requestAnimationFrame(animationLoop);
 })

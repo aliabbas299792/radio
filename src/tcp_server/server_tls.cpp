@@ -150,7 +150,6 @@ void server<server_type::TLS>::req_event_handler(request *&req, int cqe_res){
       auto &client = clients[req->client_idx];
       client.read_req_active = false;
 
-      const auto &ssl = client.ssl;
       if(client.recv_data.size() == 0) { //if there is no data in the buffer, add it
         client.recv_data = std::move(req->read_data);
         client.recv_data.resize(cqe_res);
@@ -158,7 +157,7 @@ void server<server_type::TLS>::req_event_handler(request *&req, int cqe_res){
         auto *vec = &client.recv_data;
         vec->insert(vec->end(), &(req->read_data[0]), &(req->read_data[0]) + cqe_res);
       }
-      if(wolfSSL_accept(ssl) == 1) //that means the connection was successfully established
+      if(wolfSSL_accept(client.ssl) == 1) //that means the connection was successfully established
         tls_accepted_routine(req->client_idx);
       break;
     }
@@ -166,7 +165,8 @@ void server<server_type::TLS>::req_event_handler(request *&req, int cqe_res){
       auto &client = clients[req->client_idx];
       client.num_write_reqs--; // decrement number of active write requests
       client.accept_last_written = cqe_res; //this is the amount that was last written, used in the tls_write callback
-      std::cout << "accepted on wrong: \e[92m" << wolfSSL_accept(client.ssl) << "\e[0m\n"; //call accept again
+      if(wolfSSL_accept(client.ssl) == 1) //that means the connection was successfully established
+        tls_accepted_routine(req->client_idx);
       break;
     }
     case event_type::WRITE: { //used for generally writing over TLS

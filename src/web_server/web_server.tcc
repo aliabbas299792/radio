@@ -57,7 +57,7 @@ bool basic_web_server<T>::get_process(std::string &path, bool accept_bytes, cons
   }
 
   if(subdir == "broadcast_metadata" && subdirs.size() == 0){
-    std::string metadata_str = default_plain_text_http_header + "BROADCAST_INTERVAL_MS: " + std::to_string(BROADCAST_INTERVAL_MS) + "\nSTART_TIME_S: " + std::to_string(std::chrono::time_point_cast<std::chrono::seconds>(time_start).time_since_epoch().count()) + "\r\n";
+    std::string metadata_str = default_plain_text_http_header + "BROADCAST_INTERVAL_MS: " + std::to_string(BROADCAST_INTERVAL_MS) + "\nSTART_TIME_S: " + std::to_string(std::chrono::time_point_cast<std::chrono::seconds>(time_start).time_since_epoch().count());
     std::vector<char> metadta{metadata_str.begin(), metadata_str.end()};
     // std::cout << "writing broadcast metadata... " << client_idx << "\n";
     tcp_server->write_connection(client_idx, std::move(metadta));

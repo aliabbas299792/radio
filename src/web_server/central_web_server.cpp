@@ -311,7 +311,7 @@ void central_web_server::run(){
                 for(auto &pair : audio_server::server_id_map)
                   response_str += "\"" + pair.first + "\",";
                 response_str = response_str.substr(0, response_str.size() - 1); // gets rid of the trailing comma
-                response_str += "]}\r\n";
+                response_str += "]}";
 
                 std::vector<char> response{response_str.begin(), response_str.end()};
 
@@ -368,7 +368,7 @@ void central_web_server::run(){
 									break;
 								}
 
-								std::string response = default_plain_text_http_header + "FAILURE\r\n";
+								std::string response = default_plain_text_http_header + "FAILURE";
 
                 std::vector<char> buff{response.begin(), response.end()};
                 server.post_audio_track_req_response_to_server(data.item_idx, std::move(buff));
@@ -380,13 +380,13 @@ void central_web_server::run(){
                 if(audio_server::server_id_map.count(data.additional_str)){
                   response += audio_server::instance(
                       audio_server::server_id_map[data.additional_str]
-                    )->main_thread_state.slash_separated_audio_list + "\r\n";
+                    )->main_thread_state.slash_separated_audio_list;
                   
                   std::vector<char> buff{response.begin(), response.end()};
                   
                   server.post_audio_list_req_response_to_server(data.item_idx, std::move(buff));
                 }else{
-                  response += "NOT_FOUND\r\n";
+                  response += "NOT_FOUND";
                   
                   std::vector<char> buff{response.begin(), response.end()};
                   
@@ -519,7 +519,7 @@ void central_web_server::audio_server_event_req_handler(int eventfd, int server_
       data.str_data = "FAILURE";
     }
     
-    std::string response_str = default_plain_text_http_header + data.str_data + "\r\n";
+    std::string response_str = default_plain_text_http_header + data.str_data;
 
     std::vector<char> buff{response_str.begin(), response_str.end()};
 

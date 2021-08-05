@@ -163,7 +163,7 @@ function playPCM(arrayBuffer){ //plays interleaved linear PCM with 16 bit, bit d
   buffer.getChannelData(1).set(floatsR);
 
   if(player.current_page_time < player.context.currentTime){ //ensures that the current time never lags behind context.currentTime
-    player.current_page_time = player.context.currentTime + 0.05;
+    player.current_page_time = player.context.currentTime + 0.1;
   }
 
   const source = player.context.createBufferSource();

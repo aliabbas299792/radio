@@ -267,8 +267,47 @@ input[type=range]::-ms-thumb {
 }
 
 #vote_modal_header{
-  position:fixed;
   background: #111111ed;
-  z-index:100;
   border-radius: .2rem;
+  visibility: visible;
+  padding: 10px;
+  width: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+}
+
+#vote_modal_header_items{
+  position: relative;
+  top: 10px;
+}
+
+#scrollbar_div {
+  position:fixed;
+  z-index:100;
+  visibility: hidden;
+}
+
+#vote_audio_modal_label {
+  float: left;
+}
+
+#modal_close {
+  float: right;
+}
+
+@media (min-width: 576px) {
+  #scrollbar_div {
+    width: 500px;
+  }
+}
+
+@media (max-width: 575px) {
+  #scrollbar_div {
+    overflow-y: scroll;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
 }

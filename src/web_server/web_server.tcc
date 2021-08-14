@@ -169,9 +169,7 @@ bool basic_web_server<T>::send_file_request(int client_idx, const std::string &f
     headers += "Content-Length: ";
   }
   headers += content_length + "\r\n";
-
-  if(!cache_data.found)
-    headers += "Cache-Control: no-cache, no-store, must-revalidate\r\nPragma: no-cache\r\nExpires: 0\r\n";
+  headers += "Connection: close\r\nKeep-Alive: timeout=0, max=0\r\nCache-Control: no-cache, no-store, must-revalidate\r\nPragma: no-cache\r\nExpires: 0\r\n";
   
   headers += "\r\n";
 

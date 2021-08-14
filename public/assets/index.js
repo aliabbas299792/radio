@@ -278,7 +278,7 @@ function toggleAudio(force_pause){
     player.gain_node = createGainNode(player.context)
     player.gain_node.gain.value = player.current_volume;
     
-    player.audio_ws = new WebSocket(`wss://radio.erewhon.xyz/ws/radio/${current_station_data.name}/audio_broadcast`)
+    player.audio_ws = new WebSocket(`wss://${window.location.hostname}/ws/radio/${current_station_data.name}/audio_broadcast`)
     player.audio_ws.onmessage = msg => {
       if(msg.data == "INVALID_ENDPOINT" || msg.data == "INVALID_STATION"){
         if(msg.data == "INVALID_STATION"){
@@ -458,7 +458,7 @@ window.addEventListener("load", () => {
 
 function start_metadata_connection(){
   let just_started = true;
-  audio_metadata.metadata_ws = new WebSocket(`wss://radio.erewhon.xyz/ws/radio/${current_station_data.name}/metadata_only`)
+  audio_metadata.metadata_ws = new WebSocket(`wss://${window.location.hostname}/ws/radio/${current_station_data.name}/metadata_only`)
   audio_metadata.metadata_ws.onmessage = msg => {
     if(msg.data == "INVALID_ENDPOINT" || msg.data == "INVALID_STATION"){
       if(msg.data == "INVALID_STATION"){

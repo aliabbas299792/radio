@@ -221,5 +221,5 @@ void basic_web_server<T>::kill_client(int client_idx){ // be wary of this, I don
 template<server_type T>
 void basic_web_server<T>::close_connection(int client_idx){
   kill_client(client_idx); //destroy any data related to this request
-  tcp_server->close_connection(client_idx);
+  tcp_server->start_closing_connection(client_idx);
 }

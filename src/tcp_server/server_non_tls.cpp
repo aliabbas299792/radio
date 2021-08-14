@@ -59,7 +59,7 @@ void server<server_type::NON_TLS>::write_connection(int client_idx, char* buff, 
   }
 }
 
-void server<server_type::NON_TLS>::close_connection(int client_idx) {
+void server<server_type::NON_TLS>::start_closing_connection(int client_idx){
   auto &client = clients[client_idx];
 
   if(client.num_write_reqs == 0 && active_connections.count(client_idx)){ // only erase this client if they haven't got any active write requests
@@ -67,18 +67,23 @@ void server<server_type::NON_TLS>::close_connection(int client_idx) {
 
     client.send_data = {}; //free up all the data we might have wanted to send
 
-    // printf("closing socket with id %d of client with idx %d\n", client.sockfd, client_idx);
-    int shutdwn = shutdown(client.sockfd, SHUT_RDWR);
+    int shutdwn = shutdown(client.sockfd, SHUT_WR); // stop writing, continue reading
+
+    add_read_req(client_idx, event_type::READ);
+  }
+}
+
+void server<server_type::NON_TLS>::finish_closing_connection(int client_idx) {
+  auto &client = clients[client_idx];
+
+  if(client.num_write_reqs == 0 && active_connections.count(client_idx)){ // only erase this client if they haven't got any active write requests
+    int shutdwn = shutdown(client.sockfd, SHUT_RD);
     int clse = close(client.sockfd);
-    // std::cout << "shutdown: \e[92m" << shutdwn << "\e[0m\n";
-    // if(shutdwn == -1) utility::fatal_error("Shutdown failed " + std::to_string(errno));
-    // std::cout << "errno " << errno << "\n";
-    // std::cout << "close: \e[92m" << clse << "\e[0m\n";
-    // if(clse == -1) utility::fatal_error("Close failed " + std::to_string(errno));
-    // printf("closed socket with id %d of client with idx %d\n", client.sockfd, client_idx);
 
     active_connections.erase(client_idx);
     freed_indexes.insert(freed_indexes.end(), client_idx);
+
+    std::cout << "\t\tfinished shutting down connection (shutdown ## close): (" << shutdwn << " ## " << clse << ")\n";
   }
 }
 
@@ -113,6 +118,11 @@ void server<server_type::NON_TLS>::req_event_handler(request *&req, int cqe_res)
       clients[req->client_idx].read_req_active = false;
       std::cout << "socket about to be processed: " << clients[req->client_idx].sockfd << " ## client idx: " << req->client_idx << std::endl;
       if(read_cb != nullptr) read_cb(req->client_idx, &(req->read_data[0]), cqe_res, this, custom_obj);
+      break;
+    }
+    case event_type::READ_FINAL: {
+      clients[req->client_idx].read_req_active = false;
+      finish_closing_connection(req->client_idx);
       break;
     }
     case event_type::WRITE: {

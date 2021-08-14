@@ -264,7 +264,9 @@ namespace tcp_tls_server {
 
       void write_connection(int client_idx, std::vector<char> &&buff); //writing depends on TLS or SSL, unlike read
       void write_connection(int client_idx, char *buff, size_t length); //writing but using a char pointer, doesn't do anything to the data
-      void close_connection(int client_idx); //closing depends on what resources need to be freed
+
+      void start_closing_connection(int client_idx); //closing depends on what resources need to be freed
+      void finish_closing_connection(int client_idx); //closing depends on what resources need to be freed
   };
 
   template<>
@@ -331,7 +333,9 @@ namespace tcp_tls_server {
 
       void write_connection(int client_idx, std::vector<char> &&buff); //writing depends on TLS or SSL, unlike read
       void write_connection(int client_idx, char *buff, size_t length); //writing but using a char pointer, doesn't do anything to the data
-      void close_connection(int client_idx); //closing depends on what resources need to be freed
+      
+      void start_closing_connection(int client_idx); //closing depends on what resources need to be freed
+      void finish_closing_connection(int client_idx); //closing depends on what resources need to be freed
   };
 
   #include "../tcp_server/server_base.tcc" //template implementation file

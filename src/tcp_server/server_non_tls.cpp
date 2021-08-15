@@ -69,6 +69,10 @@ void server<server_type::NON_TLS>::start_closing_connection(int client_idx){
 
     int shutdwn = shutdown(client.sockfd, SHUT_WR); // stop writing, continue reading
 
+    std::cout << "\t\tshutdown stage 1: " << -1 << "\n";
+    std::cout << "\t\t\terrno: " << errno << "\n";
+
+    client.closing_now = true;
     add_read_req(client_idx, event_type::READ);
   }
 }
@@ -84,6 +88,7 @@ void server<server_type::NON_TLS>::finish_closing_connection(int client_idx) {
     freed_indexes.insert(freed_indexes.end(), client_idx);
 
     std::cout << "\t\tfinished shutting down connection (shutdown ## close): (" << shutdwn << " ## " << clse << ")\n";
+    std::cout << "\t\t\terrno: " << errno << "\n";
   }
 }
 
@@ -115,14 +120,14 @@ void server<server_type::NON_TLS>::req_event_handler(request *&req, int cqe_res)
       break;
     }
     case event_type::READ: {
-      clients[req->client_idx].read_req_active = false;
-      std::cout << "socket about to be processed: " << clients[req->client_idx].sockfd << " ## client idx: " << req->client_idx << std::endl;
-      if(read_cb != nullptr) read_cb(req->client_idx, &(req->read_data[0]), cqe_res, this, custom_obj);
-      break;
-    }
-    case event_type::READ_FINAL: {
-      clients[req->client_idx].read_req_active = false;
-      finish_closing_connection(req->client_idx);
+      auto &client = clients[req->client_idx];
+      client.read_req_active = false;
+      if(client.closing_now && cqe_res == 0){ // if we're closing and we read 0
+        finish_closing_connection(req->client_idx);
+      }else{
+        std::cout << "socket about to be processed: " << client.sockfd << " ## client idx: " << req->client_idx << std::endl;
+        if(read_cb != nullptr) read_cb(req->client_idx, &(req->read_data[0]), cqe_res, this, custom_obj);
+      }
       break;
     }
     case event_type::WRITE: {

@@ -127,6 +127,7 @@ namespace tcp_tls_server {
     int id = 0; // id is only used to ensure the connection is unique
     int sockfd = -1;
     std::queue<write_data> send_data{};
+    bool closing_now = false; // marked as true when closing is initiated
 
     bool read_req_active = false;
     int num_write_reqs = 0; // if this is non zero, then do not proceed with the close callback, wait for other requests to finish

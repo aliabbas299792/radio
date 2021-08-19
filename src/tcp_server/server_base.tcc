@@ -41,7 +41,7 @@ void server_base<T>::start(){ //function to run the server
           if(req->event == event_type::WRITE || req->event == event_type::ACCEPT_WRITE)
             client.num_write_reqs--; // a write operation failed, decrement the number of active write operaitons for this client
 
-          static_cast<server<T>*>(this)->finish_closing_connection(req->client_idx); //making sure to remove any data relating to it as well (force close)
+          static_cast<server<T>*>(this)->force_close_connection(req->client_idx); //making sure to remove any data relating to it as well (force close)
         }
       }else if(req->event == event_type::KILL) {
         io_uring_queue_exit(&ring);
@@ -98,7 +98,7 @@ void server_base<T>::clean_up_client_resources(int client_idx, bool trigger_call
     int broadcast_additional_info = send_data.broadcast ? send_data.custom_info : -1;
     if(close_cb != nullptr && trigger_callback) close_cb(client_idx, broadcast_additional_info, static_cast<server<T>*>(this), custom_obj); // might have had multiple broadcasts
 
-    std::cout << std::string(send_data.get_ptr_and_size().buff, send_data.get_ptr_and_size().length) << " was deleted msg\n";
+    // std::cout << std::string(send_data.get_ptr_and_size().buff, send_data.get_ptr_and_size().length) << " was deleted msg\n";
     client.send_data.pop();
   }
 
@@ -207,15 +207,15 @@ int server_base<T>::setup_listener(int port) {
     if(setsockopt(listener_fd, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(yes)) == -1)
       utility::fatal_error("setsockopt SO_KEEPALIVE");
     
-    int keep_idle = 1000; // The time (in seconds) the connection needs to remain idle before TCP starts sending keepalive probes, if the socket option SO_KEEPALIVE has been set on this socket.  This option should not be used in code intended to be portable.
+    int keep_idle = 100; // The time (in seconds) the connection needs to remain idle before TCP starts sending keepalive probes, if the socket option SO_KEEPALIVE has been set on this socket.  This option should not be used in code intended to be portable.
     if(setsockopt(listener_fd, IPPROTO_TCP, TCP_KEEPIDLE, &keep_idle, sizeof(keep_idle)) == -1)
       utility::fatal_error("setsockopt TCP_KEEPIDLE");
     
-    int keep_interval = 1000; // The time (in seconds) between individual keepalive probes. This option should not be used in code intended to be portable.
+    int keep_interval = 100; // The time (in seconds) between individual keepalive probes. This option should not be used in code intended to be portable.
     if(setsockopt(listener_fd, IPPROTO_TCP, TCP_KEEPINTVL, &keep_interval, sizeof(keep_interval)) == -1)
       utility::fatal_error("setsockopt TCP_KEEPINTVL");
     
-    int keep_count = 10; // The maximum number of keepalive probes TCP should send before dropping the connection.  This option should not be used in code intended to be portable.
+    int keep_count = 5; // The maximum number of keepalive probes TCP should send before dropping the connection.  This option should not be used in code intended to be portable.
     if(setsockopt(listener_fd, IPPROTO_TCP, TCP_KEEPCNT, &keep_count, sizeof(keep_count)) == -1)
       utility::fatal_error("setsockopt TCP_KEEPCNT");
 

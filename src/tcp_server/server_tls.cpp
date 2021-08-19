@@ -53,6 +53,33 @@ void server<server_type::TLS>::finish_closing_connection(int client_idx) {
   }
 }
 
+void server<server_type::TLS>::force_close_connection(int client_idx) {
+  auto &client = clients[client_idx];
+
+  std::cout << "\t\t\t\tforce close";
+
+  if(active_connections.count(client_idx) || uninitiated_connections.count(client_idx)){
+    clean_up_client_resources(client_idx);
+
+    client.send_data = {}; //free up all the data we might have wanted to send
+
+    wolfSSL_shutdown(client.ssl);
+    wolfSSL_free(client.ssl);
+
+    client.ssl = nullptr; //so that if we try to close multiple times, free() won't crash on it, inside of wolfSSL_free()
+
+    int shutdwn = shutdown(client.sockfd, SHUT_RDWR);
+    int clse = close(client.sockfd);
+
+    uninitiated_connections.erase(client_idx);
+    active_connections.erase(client_idx);
+    freed_indexes.insert(freed_indexes.end(), client_idx);
+
+    std::cout << "\t\tFORCED shut down connection (shutdown ## close): (" << shutdwn << " ## " << clse << ")\n";
+    std::cout << "\t\t\terrno: " << errno << "\n";
+  }
+}
+
 void server<server_type::TLS>::write_connection(int client_idx, std::vector<char> &&buff) {
   auto &client = clients[client_idx];
   client.send_data.emplace(std::move(buff));

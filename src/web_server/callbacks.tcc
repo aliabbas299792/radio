@@ -193,6 +193,7 @@ void read_cb(int client_idx, char *buffer, unsigned int length, tcp_tls_server::
     }
   } else if(web_server->active_websocket_connections_client_idxs.count(client_idx)) { //this bit should be just websocket frames, and we only want to hear from active websockets, not closing ones
     web_server->websocket_process_read_cb(client_idx, buffer, length); //this is the main websocket callback, deals with receiving messages, and sending them too if it needs/wants to
+    tcp_server->read_connection(client_idx);
   }else{
     web_server->close_connection(client_idx);
   }

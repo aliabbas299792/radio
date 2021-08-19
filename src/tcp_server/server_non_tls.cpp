@@ -69,7 +69,7 @@ void server<server_type::NON_TLS>::start_closing_connection(int client_idx){
 
     int shutdwn = shutdown(client.sockfd, SHUT_WR); // stop writing, continue reading
 
-    std::cout << "\t\tshutdown stage 1: " << -1 << "\n";
+    std::cout << "\t\tshutdown stage 1: " << shutdwn << "\n";
     std::cout << "\t\t\terrno: " << errno << "\n";
 
     client.closing_now = true;
@@ -88,6 +88,25 @@ void server<server_type::NON_TLS>::finish_closing_connection(int client_idx) {
     freed_indexes.insert(freed_indexes.end(), client_idx);
 
     std::cout << "\t\tfinished shutting down connection (shutdown ## close): (" << shutdwn << " ## " << clse << ")\n";
+    std::cout << "\t\t\terrno: " << errno << "\n";
+  }
+}
+
+void server<server_type::NON_TLS>::force_close_connection(int client_idx) {
+  auto &client = clients[client_idx];
+
+  if(active_connections.count(client_idx)){ // only erase this client if they haven't got any active write requests
+    clean_up_client_resources(client_idx);
+
+    client.send_data = {}; //free up all the data we might have wanted to send
+
+    int shutdwn = shutdown(client.sockfd, SHUT_RDWR);
+    int clse = close(client.sockfd);
+
+    active_connections.erase(client_idx);
+    freed_indexes.insert(freed_indexes.end(), client_idx);
+
+    std::cout << "\t\tFORCED shut down connection (shutdown ## close): (" << shutdwn << " ## " << clse << ")\n";
     std::cout << "\t\t\terrno: " << errno << "\n";
   }
 }

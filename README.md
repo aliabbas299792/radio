@@ -31,3 +31,7 @@ Opus (https://github.com/xiph/opus) (compiled to WebAssembly)<br>
 Bootstrap 5.0 (for some modals/dropdowns in the UI)<br>
 Google Fonts (for the icons in the UI)<br>
 emsdk (https://github.com/emscripten-core/emsdk) (for the WebAssembly stuff)
+
+## Fixes
+- If inotify isn't working properly, raise the `max_user_instances`: `sudo sysctl fs.inotify.max_user_instances=8192`
+- If you're getting TCP RST packets when using a reverse proxy like NGINX, then make sure to remove any reference to `keepalive_timeout 0;` in the `location /` block or wherever you're setting up the reverse proxy stuff

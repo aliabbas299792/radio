@@ -95,6 +95,8 @@ void audio_server::run(){
   while(run_server){
     char ret = io_uring_wait_cqe(&ring, &cqe);
 
+    // std::cout << "event " << errno << "\n";
+
     if(ret < 0)
       break;
     
@@ -120,9 +122,14 @@ void audio_server::run(){
         fd_read_req(timerfd, audio_events::BROADCAST_TIMER);
         break;
   		case audio_events::INOTIFY_DIR_CHANGED: {
+
+        // std::cout << "event dir changed " << errno << "\n";
         auto &buff = req->buff;
         int event_name_length = 0;
+
+        int evs = 0;
         for(char *ptr = &buff[0]; ptr < &buff[0] + cqe->res; ptr += sizeof(inotify_event) + event_name_length){ // loop over all inotify events
+          evs++;
           auto data = reinterpret_cast<inotify_event*>(ptr);
           event_name_length = data->len; // updates the amount to increment each time
           auto file_name = data->name;
@@ -147,6 +154,8 @@ void audio_server::run(){
             file_set.erase(filename);
           }
         }
+
+        // std::cout << slash_separated_audio_list << " ## " << evs << " ## is audio list\n";
 
         fd_read_req(inotify_fd, audio_events::INOTIFY_DIR_CHANGED, inotify_read_size); // guaranteed enough for atleast 1 event
         break;

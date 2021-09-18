@@ -80,6 +80,8 @@ void audio_server::run(){
   fd_read_req(send_audio_list, audio_events::AUDIO_LIST);
   fd_read_req(file_ready_fd, audio_events::FILE_READY);
 
+  fd_read_req(request_skip_fd, audio_events::REQUEST_SKIP);
+
   // time stuff
   utility::set_timerfd_interval(timerfd, BROADCAST_INTERVAL_MS);
   fd_read_req(timerfd, audio_events::BROADCAST_TIMER);
@@ -121,6 +123,22 @@ void audio_server::run(){
 
         fd_read_req(timerfd, audio_events::BROADCAST_TIMER);
         break;
+      case audio_events::REQUEST_SKIP: {
+        auto data = get_request_to_skip_data();
+
+        if(request_skip_ips.count(data.ip)){
+          respond_to_request_to_skip(false, data.client_idx, data.thread_id);
+        }else{
+          request_skip_ips.insert(data.ip);
+
+
+
+          respond_to_request_to_skip(true, data.client_idx, data.thread_id);
+        }
+
+        fd_read_req(request_skip_fd, audio_events::REQUEST_SKIP);
+        break;
+      }
   		case audio_events::INOTIFY_DIR_CHANGED: {
 
         // std::cout << "event dir changed " << errno << "\n";
@@ -484,5 +502,27 @@ audio_req_from_program audio_server::get_from_audio_req_queue(){
 audio_req_from_program audio_server::get_from_audio_req_response_queue(){
   audio_req_from_program data{};
   audio_request_response_queue.try_dequeue(data);
+  return data;
+}
+
+void audio_server::send_request_to_skip_to_audio_server(const std::string &ip, int client_idx, int thread_id) {
+	request_to_skip_queue.emplace(client_idx, thread_id, ip);
+  eventfd_write(request_skip_fd, 1);
+}
+
+void audio_server::respond_to_request_to_skip(bool success, int client_idx, int thread_id){
+	request_to_skip_response_queue.emplace(client_idx, thread_id, "", success);
+	eventfd_write(request_skip_response_fd, 1);
+}
+
+request_skip_data audio_server::get_request_to_skip_data(){
+  request_skip_data data{};
+  request_to_skip_queue.try_dequeue(data);
+  return data;
+}
+
+request_skip_data audio_server::get_request_to_skip_response_data(){
+  request_skip_data data{};
+  request_to_skip_response_queue.try_dequeue(data);
   return data;
 }

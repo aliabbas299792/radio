@@ -40,11 +40,11 @@ server<server_type::NON_TLS>::server(
 void server<server_type::NON_TLS>::write_connection(int client_idx, std::vector<char> &&buff) {
   auto &client = clients[client_idx];
   client.send_data.emplace(std::move(buff));
-  std::cout << "send data size: " << client.send_data.size() << "\n";
+  // std::cout << "send data size: " << client.send_data.size() << "\n";
   if(client.send_data.size() == 1){ //only adds a write request in the case that the queue was empty before this
     auto &data_ref = client.send_data.front();
     auto &buff = data_ref.buff;
-    std::cout << "adding write req.... " << client_idx << " ## " << client.sockfd << "\n";
+    // std::cout << "adding write req.... " << client_idx << " ## " << client.sockfd << "\n";
     add_write_req(client_idx, event_type::WRITE, &buff[0], buff.size());
   }
 }
@@ -69,8 +69,8 @@ void server<server_type::NON_TLS>::start_closing_connection(int client_idx){
 
     int shutdwn = shutdown(client.sockfd, SHUT_WR); // stop writing, continue reading
 
-    std::cout << "\t\tshutdown stage 1: " << shutdwn << "\n";
-    std::cout << "\t\t\terrno: " << errno << "\n";
+    // std::cout << "\t\tshutdown stage 1: " << shutdwn << "\n";
+    // std::cout << "\t\t\terrno: " << errno << "\n";
 
     client.closing_now = true;
     add_read_req(client_idx, event_type::READ);
@@ -87,8 +87,8 @@ void server<server_type::NON_TLS>::finish_closing_connection(int client_idx) {
     active_connections.erase(client_idx);
     freed_indexes.insert(freed_indexes.end(), client_idx);
 
-    std::cout << "\t\tfinished shutting down connection (shutdown ## close): (" << shutdwn << " ## " << clse << ")\n";
-    std::cout << "\t\t\terrno: " << errno << "\n";
+    // std::cout << "\t\tfinished shutting down connection (shutdown ## close): (" << shutdwn << " ## " << clse << ")\n";
+    // std::cout << "\t\t\terrno: " << errno << "\n";
   }
 }
 
@@ -106,8 +106,8 @@ void server<server_type::NON_TLS>::force_close_connection(int client_idx) {
     active_connections.erase(client_idx);
     freed_indexes.insert(freed_indexes.end(), client_idx);
 
-    std::cout << "\t\tFORCED shut down connection (shutdown ## close): (" << shutdwn << " ## " << clse << ")\n";
-    std::cout << "\t\t\terrno: " << errno << "\n";
+    // std::cout << "\t\tFORCED shut down connection (shutdown ## close): (" << shutdwn << " ## " << clse << ")\n";
+    // std::cout << "\t\t\terrno: " << errno << "\n";
   }
 }
 
@@ -144,7 +144,7 @@ void server<server_type::NON_TLS>::req_event_handler(request *&req, int cqe_res)
       if(client.closing_now && cqe_res == 0){ // if we're closing and we read 0
         finish_closing_connection(req->client_idx);
       }else{
-        std::cout << "socket about to be processed: " << client.sockfd << " ## client idx: " << req->client_idx << std::endl;
+        // std::cout << "socket about to be processed: " << client.sockfd << " ## client idx: " << req->client_idx << std::endl;
         if(read_cb != nullptr) read_cb(req->client_idx, &(req->read_data[0]), cqe_res, this, custom_obj);
       }
       break;

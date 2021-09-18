@@ -10,9 +10,6 @@ bool basic_web_server<T>::instance_exists = false;
 template<server_type T>
 bool basic_web_server<T>::get_process(std::string &path, bool accept_bytes, const std::string& sec_websocket_key, int client_idx, std::string ip){
   char *path_temp = strdup(path.c_str());
-
-  // static int count = 0;
-  // std::cout << "got the req " << count++ << "\n";
   
   char *saveptr = nullptr;
   char *token = strtok_r(path_temp, "/", &saveptr);
@@ -28,23 +25,14 @@ bool basic_web_server<T>::get_process(std::string &path, bool accept_bytes, cons
 
   std::vector<std::string> subdirs{};
 
-  // std::cout << "web server client idx: " << client_idx << std::endl;
-
-  // std::cout << "ws clients (client idx, id): ";
-
-  // for(const auto &client : websocket_clients)
-  //   std::cout << "(" << client.client_idx << ", " << client.id << ") ";
-  
-  // std::cout << std::endl << "tcp clients (ws client idx): ";
-
-  // for(const auto &client : tcp_clients)
-  //   std::cout << "(" << client.ws_client_idx << ") ";
-  
-  // std::cout << std::endl << std::endl;
-
   while((token = strtok_r(nullptr, "/", &saveptr)) != nullptr)
     subdirs.push_back(token);
   free(path_temp);
+
+  if(subdir == "skip_track" && subdirs.size() == 1){
+    post_skip_request_to_server(client_idx, subdirs[0], ip); // so we expect the server to respond with true or false
+    return true;
+  }
 
   if(subdir == "audio_list" && subdirs.size() == 1){
     post_audio_list_req_to_program(client_idx, subdirs[0]); // so we expect the server to respond with the list for this station
@@ -209,8 +197,18 @@ void basic_web_server<T>::kill_client(int client_idx){ // be wary of this, I don
 
   tcp_clients[client_idx] = tcp_client(); // reset any info about the client
 
-  for(auto &set : broadcast_ws_clients_tcp_client_idxs)
-    set.erase(client_idx);
+  for(const auto &set : broadcast_ws_clients_tcp_client_idxs){
+    for(const auto &item : set){
+      std::cout << item << " ## ";
+    }
+  }
+  
+  for(int i =0; i < broadcast_ws_clients_tcp_client_idxs.size(); i++){
+    if(broadcast_ws_clients_tcp_client_idxs[i].count(client_idx)){
+      std::cout << i << " #### " << client_idx << "\n";
+      broadcast_ws_clients_tcp_client_idxs[i].erase(client_idx);
+    }
+  }
   
   if(active_websocket_connections_client_idxs.count(ws_client_idx)){
     active_websocket_connections_client_idxs.erase(client_idx);

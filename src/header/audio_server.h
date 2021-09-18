@@ -39,7 +39,8 @@ struct audio_data {
 
 enum class audio_events {
 	AUDIO_BROADCAST_EVT, FILE_REQUEST, INOTIFY_DIR_CHANGED, AUDIO_LIST, AUDIO_LIST_UPDATE,
-	FILE_READY, AUDIO_REQUEST_FROM_PROGRAM, AUDIO_QUEUE, BROADCAST_TIMER, KILL
+	FILE_READY, AUDIO_REQUEST_FROM_PROGRAM, AUDIO_QUEUE, BROADCAST_TIMER, KILL,
+  REQUEST_SKIP
 };
 
 static struct {
@@ -120,8 +121,18 @@ struct audio_queue_data {
   audio_queue_data(int client_idx, int thread_id, std::string file_queue = "") : file_queue(file_queue), thread_id(thread_id), client_idx(client_idx) {} // file_queue is only used in the response, so optional
 };
 
+struct request_skip_data {
+  std::string ip{};
+  int client_idx = -1;
+  int thread_id = -1;
+  bool success = false;
+  request_skip_data() {}
+  request_skip_data(int client_idx, int thread_id, std::string ip, bool success = false) : client_idx(client_idx), thread_id(thread_id), ip(ip), success(success) {}
+};
+
 class audio_server {
   std::unordered_set<std::string> file_set{};
+  std::unordered_set<std::string> request_skip_ips{}; // cleared after each track - contains the IP of anyone who's requested to skip
 
   std::vector<std::string> audio_file_paths{};
   std::vector<std::string> audio_list{};
@@ -144,6 +155,9 @@ class audio_server {
 
 	moodycamel::ReaderWriterQueue<audio_req_from_program> audio_request_queue{};
 	moodycamel::ReaderWriterQueue<audio_req_from_program> audio_request_response_queue{};
+
+	moodycamel::ReaderWriterQueue<request_skip_data> request_to_skip_queue{};
+	moodycamel::ReaderWriterQueue<request_skip_data> request_to_skip_response_queue{};
 
   moodycamel::ReaderWriterQueue<combined_data_chunk> broadcast_queue{}; // the audio data chunk and the metadata only chunk
 
@@ -220,6 +234,13 @@ public:
   combined_data_chunk get_broadcast_data();
   void broadcast_to_central_server(std::string &&audio_data, std::string &&metadata_only, std::string track_name);
   const int broadcast_fd = eventfd(0, 0);
+
+  void send_request_to_skip_to_audio_server(const std::string &ip, int client_idx, int thread_id);
+  void respond_to_request_to_skip(bool success, int client_idx, int thread_id);
+  request_skip_data get_request_to_skip_data();
+  request_skip_data get_request_to_skip_response_data(); 
+	const int request_skip_fd = eventfd(0, 0);
+	const int request_skip_response_fd = eventfd(0, 0);
 
   // these are updated via the event loop on the main thread, rather than directly since could cause a data race
   struct {

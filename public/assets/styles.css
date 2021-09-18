@@ -20,7 +20,39 @@ body{
   background: #301c24;
 }
 
-#broadcast_time{
+.radio_alert {
+  width: 90vw;
+  margin: auto;
+  position: absolute;
+  top: 2%;
+  left: 5%;
+  text-align: center;
+  color: #fff;
+  padding: 10px;
+  box-shadow: #000 2px 2px 2px;
+  z-index: 2000;
+  border-radius: 5px;
+  transition: .2s ease all;
+  top: -20%;
+  opacity: 0;
+}
+
+#success_alert {
+  background: #68c783bd;
+}
+
+#bad_alert {
+  background: #b93d3dbd;
+}
+
+#skip_button{
+  width: 100%;
+  margin: 10px;
+  text-align: center;
+  transform: translate(-10px, 0);
+}
+
+#top_right_container {
   color:#fff;
   top: 0px;
   right: 0px;
@@ -29,6 +61,7 @@ body{
   position:fixed;
   z-index: 100;
   user-select: none;
+  min-width: 200px;
 }
 
 #playing{

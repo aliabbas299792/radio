@@ -5,11 +5,12 @@ SOURCE_FILES=$(find . -type d \( -path ./build -o -path ./src/vendor -o -path ./
 cd src
 rm -rf server
 cmake \
+  -GNinja \
   -B ../build \
   -DSOURCE_FILES="$SOURCE_FILES" \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=1
 cd ..
-cd build && make
+cd build && ninja
 cp compile_commands.json .. # for clangd
 cp -f webserver ../server
 cd ..

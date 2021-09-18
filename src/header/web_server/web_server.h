@@ -227,6 +227,17 @@ namespace web_server{
       // std::cout << "size to server: \e[34m" << to_server_queue.size_approx() << "\e[0m" << std::endl;
       tcp_server->notify_event();
     }
+
+    void post_skip_request_to_server(int client_idx, std::string station, std::string ip){
+      if(!tcp_server) return; // need this stuff set before posting any messages
+      message_post_data data;
+      data.msg_type = message_type::skip_request;
+      data.item_idx = client_idx;
+      data.additional_str = station;
+      data.additional_str2 = ip;
+      to_program_queue.enqueue(std::move(data));
+      eventfd_write(central_communication_fd, 1);
+    }
     
     void post_audio_list_req_to_program(int client_idx, std::string station){
       if(!tcp_server) return; // need this stuff set before posting any messages

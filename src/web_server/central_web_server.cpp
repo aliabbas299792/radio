@@ -374,6 +374,9 @@ void central_web_server::run(){
                 server.post_audio_track_req_response_to_server(data.item_idx, std::move(buff));
                 break;
               }
+              case web_server::message_type::skip_request: {
+
+              }
               case web_server::message_type::request_audio_list: {
                 std::string response = default_plain_text_http_header;
                   
@@ -502,7 +505,7 @@ void central_web_server::audio_server_event_req_handler(int eventfd, int server_
     auto data = server->get_from_file_req_transfer_queue();
 
     int fd = open(data.filepath.c_str(), O_RDONLY);
-    std::cout << "Now loading " << data.filepath << std::endl;
+    // std::cout << "Now loading " << data.filepath << std::endl;
     size_t size = utility::get_file_size(fd);
     server->main_thread_state.fd_to_filepath[fd] = data.filepath;
     add_read_req(fd, size, server_id); // add a read request for this file, setting the server_id correctly - need it to locate the server

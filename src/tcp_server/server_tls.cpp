@@ -25,7 +25,7 @@ void server<server_type::TLS>::start_closing_connection(int client_idx) {
 
     shutdown(client.sockfd, SHUT_WR);
 
-    std::cout << "we've started closing the connection\n";
+    // std::cout << "we've started closing the connection\n";
 
     client.closing_now = true;
     add_read_req(client_idx, event_type::READ);
@@ -48,15 +48,15 @@ void server<server_type::TLS>::finish_closing_connection(int client_idx) {
     active_connections.erase(client_idx);
     freed_indexes.insert(freed_indexes.end(), client_idx);
 
-    std::cout << "\t\tfinished shutting down connection (shutdown ## close): (" << shutdwn << " ## " << clse << ")\n";
-    std::cout << "\t\t\terrno: " << errno << "\n";
+    // std::cout << "\t\tfinished shutting down connection (shutdown ## close): (" << shutdwn << " ## " << clse << ")\n";
+    // std::cout << "\t\t\terrno: " << errno << "\n";
   }
 }
 
 void server<server_type::TLS>::force_close_connection(int client_idx) {
   auto &client = clients[client_idx];
 
-  std::cout << "\t\t\t\tforce close";
+  // std::cout << "\t\t\t\tforce close";
 
   if(active_connections.count(client_idx) || uninitiated_connections.count(client_idx)){
     clean_up_client_resources(client_idx);
@@ -74,9 +74,6 @@ void server<server_type::TLS>::force_close_connection(int client_idx) {
     uninitiated_connections.erase(client_idx);
     active_connections.erase(client_idx);
     freed_indexes.insert(freed_indexes.end(), client_idx);
-
-    std::cout << "\t\tFORCED shut down connection (shutdown ## close): (" << shutdwn << " ## " << clse << ")\n";
-    std::cout << "\t\t\terrno: " << errno << "\n";
   }
 }
 

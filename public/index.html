@@ -18,8 +18,13 @@
     <meta name="theme-color" content="#ffffff">    
   </head>
   <body>
+    <div id="bad_alert" class="radio_alert"></div>
+    <div id="success_alert" class="radio_alert"></div>
     <div id="background"></div>
-    <div id="broadcast_time"></div>
+    <div id="top_right_container">
+      <div id="broadcast_time">Running for: 0s</div>
+      <div id="skip_button" class="btn btn-secondary">Vote Skip</div>
+    </div>
     <canvas id="canvas" style="height:257.143px"></canvas>
     <h2 id="playing" style="font-family: sans-serif; color: #fff; text-align: center;">Loading...</h2>
     <div id="player_bar_holder">
@@ -67,6 +72,17 @@
     </div>
 
     <script src= "/main.js"></script>
+    <script>
+      function successful_action_popup(msg, is_bad = false){
+        const ev = new CustomEvent("successful_action", {
+          detail: {
+            is_bad,
+            msg
+          }
+        });
+        document.dispatchEvent(ev);
+      }
+    </script>
     <script src="/assets/index.js"></script>
     <script>
       // strictly UI stuff
@@ -76,6 +92,33 @@
       const volume_control_container= document.getElementById("volume_control_container");
       const volume_control= volume_control_container.children[0];
       const player_bar_holder = document.getElementById("player_bar_holder");
+      const success_alert = document.getElementById("success_alert");
+      const bad_alert = document.getElementById("bad_alert");
+
+      success_alert_timeout = undefined;
+      bad_alert_timeout = undefined;
+      document.addEventListener("successful_action", (e) => {
+        clearTimeout(success_alert_timeout)
+        const msg = e.detail.msg;
+        const is_bad = e.detail.is_bad;
+
+        if(is_bad){
+          bad_alert_timeout = set_alert(msg, bad_alert);
+        }else{
+          success_alert_timeout = set_alert(msg, success_alert);
+        }
+      })
+
+      function set_alert(msg, element){
+        element.innerText = msg;
+        element.style.opacity = 1;
+        element.style.top = "2%";
+
+        return setTimeout(() => {
+          element.style.opacity = "";
+          element.style.top = "";
+        }, 1000)
+      }
       
       play_btn_click_timeout = undefined;
       play_btn.onclick = () => {

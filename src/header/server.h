@@ -1,27 +1,15 @@
 #ifndef SERVER
 #define SERVER
 
-#include <cstring> //for memset and strtok
-
-#include <stdio.h> //perror and printf
-#include <netdb.h> //for networking stuff like addrinfo
-
-#include <sys/syscall.h> //syscall stuff parameters (as in like __NR_io_uring_enter/__NR_io_uring_setup)
-#include <sys/mman.h> //for mmap
-#include <sys/eventfd.h> // for eventfd=
-
-#include <liburing.h> //for liburing
-
 #include <wolfssl/options.h>
 #include <wolfssl/ssl.h>
+#include <liburing.h> //for liburing
+#include <sys/eventfd.h> // for eventfd
 
 #include <queue>
-#include <iostream> //for string and iostream stuff
-#include <unordered_map>
-#include <unordered_set>
-#include <set> //ordered set for freed indexes, I believe it is sorted in ascending order which is exactly what we want
-#include <chrono>
 #include <mutex>
+#include <unordered_set>
+#include <set>
 
 #include "server_metadata.h"
 #include "utility.h"
@@ -49,12 +37,6 @@ namespace tcp_tls_server {
 
   template<server_type T>
   using custom_read_callback = void(*)(CUSTOM_READ_CB_PARAMS);
-
-  // extern uint64_t mem_usage_event;
-  // extern uint64_t mem_usage_read;
-  // extern uint64_t mem_usage_write;
-  // extern uint64_t mem_usage_customread;
-  // extern uint64_t mem_usage_accept;
 
   struct request {
     // fields used for any request
@@ -340,8 +322,6 @@ namespace tcp_tls_server {
       void finish_closing_connection(int client_idx); //closing depends on what resources need to be freed
       void force_close_connection(int client_idx); // should be used only when it absolutely needs to be closed now
   };
-
-  #include "../tcp_server/server_base.tcc" //template implementation file
 }
 
 #endif

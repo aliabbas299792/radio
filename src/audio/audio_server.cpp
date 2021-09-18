@@ -1,4 +1,5 @@
 #include "../header/audio_server.h"
+#include "../header/web_server/web_server.h"
 #include <chrono>
 #include <algorithm>
 #include <sys/eventfd.h>
@@ -526,3 +527,6 @@ request_skip_data audio_server::get_request_to_skip_response_data(){
   request_to_skip_response_queue.try_dequeue(data);
   return data;
 }
+
+template class web_server::basic_web_server<server_type::TLS>;
+template class web_server::basic_web_server<server_type::NON_TLS>;

@@ -1,6 +1,7 @@
-#pragma once
 #include "../header/callbacks.h"
 #include "../header/utility.h"
+
+#include "../header/web_server/web_server.h"
 
 #include <curl/curl.h>
 
@@ -10,13 +11,13 @@ template<server_type T>
 using basic_web_server = web_server::basic_web_server<T>;
 
 template<server_type T>
-void accept_cb(int client_idx, tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the accept callback
+void tcp_callbacks::accept_cb(int client_idx, tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the accept callback
   const auto web_server = (basic_web_server<T>*)custom_obj;
   web_server->new_tcp_client(client_idx);
 }
 
 template<server_type T>
-void close_cb(int client_idx, int broadcast_additional_info, tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the close callback
+void tcp_callbacks::close_cb(int client_idx, int broadcast_additional_info, tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the close callback
   const auto web_server = (basic_web_server<T>*)custom_obj;
 
   // std::cout << "\t\t\t\t\t\t\t\e[92mkilled (client idx): " << client_idx << "\e[0m" << std::endl;
@@ -32,7 +33,7 @@ void close_cb(int client_idx, int broadcast_additional_info, tcp_tls_server::ser
 }
 
 template<server_type T>
-void event_cb(tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the event callback
+void tcp_callbacks::event_cb(tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the event callback
   const auto web_server = (basic_web_server<T>*)custom_obj;
   const auto &client_idxs = web_server->active_websocket_connections_client_idxs;
 
@@ -107,7 +108,7 @@ void event_cb(tcp_tls_server::server<T> *tcp_server, void *custom_obj){ //the ev
 }
 
 template<server_type T>
-void custom_read_cb(int client_idx, int fd, std::vector<char> &&buff, size_t read_bytes, tcp_tls_server::server<T> *tcp_server, void *custom_obj){ // the custom read callback
+void tcp_callbacks::custom_read_cb(int client_idx, int fd, std::vector<char> &&buff, size_t read_bytes, tcp_tls_server::server<T> *tcp_server, void *custom_obj){ // the custom read callback
   const auto web_server = (basic_web_server<T>*)custom_obj;
 
   if(fd == web_server->web_cache.inotify_fd){
@@ -138,7 +139,7 @@ void custom_read_cb(int client_idx, int fd, std::vector<char> &&buff, size_t rea
 }
 
 template<server_type T>
-void read_cb(int client_idx, char *buffer, unsigned int length, tcp_tls_server::server<T> *tcp_server, void *custom_obj){
+void tcp_callbacks::read_cb(int client_idx, char *buffer, unsigned int length, tcp_tls_server::server<T> *tcp_server, void *custom_obj){
   const auto web_server = (basic_web_server<T>*)custom_obj;
   
   if(web_server->is_valid_http_req(buffer, length)){ //if not a valid HTTP req, then probably a websocket frame
@@ -200,7 +201,7 @@ void read_cb(int client_idx, char *buffer, unsigned int length, tcp_tls_server::
 }
 
 template<server_type T>
-void write_cb(int client_idx, int broadcast_additional_info, tcp_tls_server::server<T> *tcp_server, void *custom_obj){
+void tcp_callbacks::write_cb(int client_idx, int broadcast_additional_info, tcp_tls_server::server<T> *tcp_server, void *custom_obj){
   const auto web_server = (basic_web_server<T>*)custom_obj;
 
   if(broadcast_additional_info != -1){ // only a broadcast if this is not -1
@@ -217,3 +218,21 @@ void write_cb(int client_idx, int broadcast_additional_info, tcp_tls_server::ser
     // std::cout << "not closing client connection: " << client_idx << std::endl;
   }
 }
+
+template void tcp_callbacks::write_cb(int client_idx, int broadcast_additional_info, tcp_tls_server::server<server_type::TLS> *tcp_server, void *custom_obj);
+template void tcp_callbacks::write_cb(int client_idx, int broadcast_additional_info, tcp_tls_server::server<server_type::NON_TLS> *tcp_server, void *custom_obj);
+
+template void tcp_callbacks::read_cb(int client_idx, char *buffer, unsigned int length, tcp_tls_server::server<server_type::TLS> *tcp_server, void *custom_obj);
+template void tcp_callbacks::read_cb(int client_idx, char *buffer, unsigned int length, tcp_tls_server::server<server_type::NON_TLS> *tcp_server, void *custom_obj);
+
+template void tcp_callbacks::custom_read_cb(int client_idx, int fd, std::vector<char> &&buff, size_t read_bytes, tcp_tls_server::server<server_type::TLS> *tcp_server, void *custom_obj);
+template void tcp_callbacks::custom_read_cb(int client_idx, int fd, std::vector<char> &&buff, size_t read_bytes, tcp_tls_server::server<server_type::NON_TLS> *tcp_server, void *custom_obj);
+
+template void tcp_callbacks::event_cb(tcp_tls_server::server<server_type::TLS> *tcp_server, void *custom_obj);
+template void tcp_callbacks::event_cb(tcp_tls_server::server<server_type::NON_TLS> *tcp_server, void *custom_obj);
+
+template void tcp_callbacks::close_cb(int client_idx, int broadcast_additional_info, tcp_tls_server::server<server_type::TLS> *tcp_server, void *custom_obj);
+template void tcp_callbacks::close_cb(int client_idx, int broadcast_additional_info, tcp_tls_server::server<server_type::NON_TLS> *tcp_server, void *custom_obj);
+
+template void tcp_callbacks::accept_cb(int client_idx, tcp_tls_server::server<server_type::TLS> *tcp_server, void *custom_obj);
+template void tcp_callbacks::accept_cb(int client_idx, tcp_tls_server::server<server_type::NON_TLS> *tcp_server, void *custom_obj);

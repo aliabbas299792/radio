@@ -1,4 +1,3 @@
-#pragma once
 #include "../header/web_server/web_server.h"
 #include <chrono>
 
@@ -6,6 +5,12 @@ using namespace web_server;
 
 template<server_type T>
 bool basic_web_server<T>::instance_exists = false;
+
+template<server_type T>
+basic_web_server<T>::basic_web_server(){
+  instance_exists = true;
+  utility::set_timerfd_interval(ws_ping_timerfd, 30000); // the ping timer should go off every 30 seconds
+};
 
 template<server_type T>
 bool basic_web_server<T>::get_process(std::string &path, bool accept_bytes, const std::string& sec_websocket_key, int client_idx, std::string ip){
@@ -221,3 +226,6 @@ void basic_web_server<T>::close_connection(int client_idx){
   kill_client(client_idx); //destroy any data related to this request
   tcp_server->start_closing_connection(client_idx);
 }
+
+template class web_server::basic_web_server<server_type::TLS>;
+template class web_server::basic_web_server<server_type::NON_TLS>;

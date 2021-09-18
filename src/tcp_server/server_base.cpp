@@ -1,4 +1,3 @@
-#pragma once
 #include "../header/server.h"
 
 #include <chrono>
@@ -342,3 +341,6 @@ template<server_type T>
 void server_base<T>::add_tcp_accept_req(){
   add_accept_req(listener_fd, &client_address, &client_address_length);
 }
+
+template class tcp_tls_server::server_base<server_type::TLS>;
+template class tcp_tls_server::server_base<server_type::NON_TLS>;

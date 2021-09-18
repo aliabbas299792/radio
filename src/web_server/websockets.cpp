@@ -1,4 +1,3 @@
-#pragma once
 #include "../header/web_server/web_server.h"
 
 using namespace web_server;
@@ -352,3 +351,6 @@ std::pair<int, std::vector<std::vector<char>>> basic_web_server<T>::get_ws_frame
 
   return {1, frames};
 }
+
+template class web_server::basic_web_server<server_type::TLS>;
+template class web_server::basic_web_server<server_type::NON_TLS>;

@@ -34,6 +34,8 @@ namespace web_server{
     receiving_data_info(int length = -1, std::vector<char> buffer = {}) : length(length), buffer(buffer) {}
     int length = -1;
     std::vector<char> buffer{};
+
+    ~receiving_data_info() {}
   };
 
   struct ws_client {
@@ -119,10 +121,7 @@ namespace web_server{
     static bool instance_exists; // used by anything which needs to be initialised before server threads are made
     
     basic_web_server(basic_web_server &&server) = default;
-    basic_web_server() {
-      instance_exists = true;
-      utility::set_timerfd_interval(ws_ping_timerfd, 30000); // the ping timer should go off every 30 seconds
-    };
+    basic_web_server();
 
     void set_tcp_server(tcp_tls_server::server<T> *tcp_server); //required to be called to ensure pointer to TCP server is present
 
@@ -383,9 +382,6 @@ namespace web_server{
       close(web_cache.inotify_fd);
     }
   };
-
-  #include "../../web_server/web_server.tcc"
-  #include "../../web_server/websockets.tcc"
 }
 
 template<server_type T>

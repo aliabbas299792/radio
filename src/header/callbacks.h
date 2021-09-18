@@ -12,7 +12,6 @@
 using uchar = unsigned char;
 
 namespace tcp_callbacks {
-  
   template<server_type T>
   void accept_cb(ACCEPT_CB_PARAMS);
 
@@ -30,8 +29,6 @@ namespace tcp_callbacks {
 
   template<server_type T>
   void custom_read_cb(CUSTOM_READ_CB_PARAMS);
-
-  #include "../web_server/callbacks.tcc" //template implementation file
 }
 
 #endif

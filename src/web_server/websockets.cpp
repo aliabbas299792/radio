@@ -211,9 +211,6 @@ template<server_type T>
 bool basic_web_server<T>::close_ws_connection_req(int ws_client_idx, bool client_already_closed){
   auto &client_data = websocket_clients[ws_client_idx];
 
-  for(auto &set : broadcast_ws_clients_tcp_client_idxs) // erase the client from any subscriptions
-    set.erase(client_data.client_idx);
-
   client_data.currently_writing++;
   active_websocket_connections_client_idxs.erase(client_data.client_idx); // considered closed to outside observers now
   client_data.websocket_frames = {};

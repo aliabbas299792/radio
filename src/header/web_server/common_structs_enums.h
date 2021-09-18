@@ -35,7 +35,8 @@ namespace web_server {
     request_audio_queue,
     request_audio_queue_response,
     skip_request,
-    skip_request_response
+    skip_request_response,
+    radio_client_left
   };
 
   struct tcp_client {

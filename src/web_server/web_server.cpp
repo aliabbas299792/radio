@@ -35,7 +35,7 @@ bool basic_web_server<T>::get_process(std::string &path, bool accept_bytes, cons
   free(path_temp);
 
   if(subdir == "skip_track" && subdirs.size() == 1){
-    post_skip_request_to_server(client_idx, subdirs[0], ip); // so we expect the server to respond with true or false
+    post_skip_request_to_program(client_idx, subdirs[0], ip); // so we expect the server to respond with true or false
     return true;
   }
 
@@ -201,16 +201,10 @@ void basic_web_server<T>::kill_client(int client_idx){ // be wary of this, I don
   all_websocket_connections.erase(ws_client_idx); //connection definitely closed now
 
   tcp_clients[client_idx] = tcp_client(); // reset any info about the client
-
-  for(const auto &set : broadcast_ws_clients_tcp_client_idxs){
-    for(const auto &item : set){
-      std::cout << item << " ## ";
-    }
-  }
   
   for(int i =0; i < broadcast_ws_clients_tcp_client_idxs.size(); i++){
     if(broadcast_ws_clients_tcp_client_idxs[i].count(client_idx)){
-      std::cout << i << " #### " << client_idx << "\n";
+      post_radio_client_left_to_server(i); // client has left this channel
       broadcast_ws_clients_tcp_client_idxs[i].erase(client_idx);
     }
   }

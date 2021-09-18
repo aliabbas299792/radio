@@ -22,8 +22,9 @@
     <div id="success_alert" class="radio_alert"></div>
     <div id="background"></div>
     <div id="top_right_container">
-      <div id="broadcast_time">Running for: 0s</div>
       <div id="skip_button" class="btn btn-secondary">Vote Skip</div>
+      <div id="broadcast_time">Running for: 0s</div>
+      <div id="num_listeners">Listeners: 0</div>
     </div>
     <canvas id="canvas" style="height:257.143px"></canvas>
     <h2 id="playing" style="font-family: sans-serif; color: #fff; text-align: center;">Loading...</h2>
@@ -82,6 +83,13 @@
         });
         document.dispatchEvent(ev);
       }
+
+      function update_num_listeners(num){
+        const ev = new CustomEvent("num_listeners_update", {
+          detail: num
+        });
+        document.dispatchEvent(ev);
+      }
     </script>
     <script src="/assets/index.js"></script>
     <script>
@@ -94,6 +102,7 @@
       const player_bar_holder = document.getElementById("player_bar_holder");
       const success_alert = document.getElementById("success_alert");
       const bad_alert = document.getElementById("bad_alert");
+      const num_listeners = document.getElementById("num_listeners");
 
       success_alert_timeout = undefined;
       bad_alert_timeout = undefined;
@@ -107,6 +116,10 @@
         }else{
           success_alert_timeout = set_alert(msg, success_alert);
         }
+      })
+
+      document.addEventListener('num_listeners_update', (e) => {
+        num_listeners.innerText = `Listeners: ${e.detail}`;
       })
 
       function set_alert(msg, element){

@@ -9,6 +9,8 @@
 #include <sys/eventfd.h>
 #include <sys/timerfd.h>
 
+#include <atomic>
+
 #include "utility.h"
 #include "web_server/web_server.h"
 
@@ -125,9 +127,9 @@ struct request_skip_data {
   std::string ip{};
   int client_idx = -1;
   int thread_id = -1;
-  bool success = false;
+  std::string resp_str = "";
   request_skip_data() {}
-  request_skip_data(int client_idx, int thread_id, std::string ip, bool success = false) : client_idx(client_idx), thread_id(thread_id), ip(ip), success(success) {}
+  request_skip_data(int client_idx, int thread_id, std::string ip, std::string resp_str = "") : client_idx(client_idx), thread_id(thread_id), ip(ip), resp_str(resp_str) {}
 };
 
 class audio_server {
@@ -190,7 +192,7 @@ class audio_server {
   std::thread audio_thread{};
   void run(); // run the audio server
 public:
-  audio_server(audio_server &&server) = default;
+  audio_server(audio_server &&server) = delete;
   audio_server(std::string audio_server_name, std::string dir_path);
   int id = -1;
 
@@ -236,11 +238,16 @@ public:
   const int broadcast_fd = eventfd(0, 0);
 
   void send_request_to_skip_to_audio_server(const std::string &ip, int client_idx, int thread_id);
-  void respond_to_request_to_skip(bool success, int client_idx, int thread_id);
+  void respond_to_request_to_skip(std::string resp_str, int client_idx, int thread_id);
   request_skip_data get_request_to_skip_data();
   request_skip_data get_request_to_skip_response_data(); 
 	const int request_skip_fd = eventfd(0, 0);
 	const int request_skip_response_fd = eventfd(0, 0);
+  int num_skip_votes = 0; // reset for every track
+  bool skip_track = false; // reset for every track
+  bool skipped_track_metadata_info = false; // reset once sent out in metadata
+
+  std::atomic<uint32_t> num_listeners{}; // number of people listening on the station, atomic, can be read/written from central server and here at the same time
 
   // these are updated via the event loop on the main thread, rather than directly since could cause a data race
   struct {

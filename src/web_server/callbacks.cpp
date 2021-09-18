@@ -92,6 +92,11 @@ void tcp_callbacks::event_cb(tcp_tls_server::server<T> *tcp_server, void *custom
       tcp_server->write_connection(client_idx, std::move(data.buff));
       break;
     }
+    case web_server::message_type::skip_request_response: {
+      int client_idx = data.item_idx;
+      tcp_server->write_connection(client_idx, std::move(data.buff));
+      break;
+    }
     case web_server::message_type::request_audio_track_response: {
       int client_idx = data.item_idx;
       // std::cout << "Writing (track req): " << data.buff.size() << ", client idx: " << client_idx << std::endl;

@@ -223,15 +223,33 @@ async function playMusic(typedArrayCurrent){ //takes 1 packet of audio, decode, 
   }
 }
 
+let timeout_for_next_track = undefined
+let timeout_custom_for_next = undefined
+function update_playing_in(text, total_length, timeout_len){
+  clearTimeout(timeout_for_next_track)
+  clearTimeout(timeout_custom_for_next)
+
+  timeout_custom_for_next = setTimeout(() => {
+    audio_metadata.relative_start_time = time()
+    
+    audio_metadata.total_length = total_length
+    player.playing_audio_el.innerHTML = text;
+    updateMetadata(text);
+  }, timeout_len)
+}
 function update_playing(text, total_length, force){
+  clearTimeout(timeout_for_next_track)
+  clearTimeout(timeout_custom_for_next)
+
   if(force){
+    audio_metadata.relative_start_time = time()
     audio_metadata.total_length = total_length
     updateMetadata(text);
     return player.playing_audio_el.innerHTML = text;
   }
     
 
-  setTimeout(() => {
+  timeout_for_next_track = setTimeout(() => {
     if(player.playing_audio_el.innerHTML != "Loading...")
       audio_metadata.relative_start_time = time()
     
@@ -250,6 +268,7 @@ function end_audio(){
 
 }
 
+let just_skipped = false;
 toggle_audio_timeout = undefined;
 function toggleAudio(force_pause){
   if(!player.audio_ws && force_pause) return; // return if already paused
@@ -298,8 +317,11 @@ function toggleAudio(force_pause){
         // then it's a valid page and play it, otherwise it is skipped
         // (this assumes that the tracks are at least around 30 seconds long)
         // this should prevent excessive drift from the metadata timing
+        // (and also plays if just had a skip event)
         if(audio_data.start_offset + prev_durations > audio_metadata.time_in_audio() - 500 
-          || audio_data.start_offset + prev_durations < audio_metadata.time_in_audio() - 20000){
+          || audio_data.start_offset + prev_durations < audio_metadata.time_in_audio() - 20000
+          || just_skipped){
+          just_skipped = false;
           arr = new Uint8Array(page.buff)
           playMusic(arr)
         }
@@ -478,9 +500,16 @@ function start_metadata_connection(){
 
     if(just_started)
       update_playing(metadata.title, metadata.total_length, true);
+    
+    if(metadata.skipped_track){
+      just_skipped = true;
+      update_playing_in(metadata.title, metadata.total_length, Math.max(0, player.current_page_time - player.context.currentTime) * 1000)
+    }
 
     audio_metadata.time_ms = metadata.start_offset
     audio_metadata.title = metadata.title
+
+    update_num_listeners(metadata.num_listeners);
 
     if(just_started){
       just_started = false;
@@ -574,3 +603,14 @@ function vote_for(track_name){
       refresh_voted_for_stuff(data)
   })
 }
+
+const skip_button = document.getElementById("skip_button");
+skip_button.addEventListener('click', () => [
+  fetch(`/skip_track/${current_station_data.name}`).then(res => res.text()).then(data => {
+    if(data.indexOf("FAILURE") == 0){
+      successful_action_popup(data.replace("FAILURE:", "Failure: "), true)
+    }else{
+      successful_action_popup("Succesfully skipped");
+    }
+  })
+])

@@ -301,8 +301,8 @@ void central_web_server::run(){
           auto efd_count = *reinterpret_cast<uint64_t*>(req->buff.data()); // we only write a value of 1 to the efd, so if greater than 1, multiple items in queue
           
           while(efd_count--){ // possibly deal with multiple items in the queue
-            auto &server = thread_data_container[req->custom_info].server;
-            auto data = server.get_from_to_program_queue();
+            web_server::basic_web_server<T> &server = thread_data_container[req->custom_info].server;
+            web_server::message_post_data data = server.get_from_to_program_queue();
 
             switch(data.msg_type){
               case web_server::message_type::request_station_list: {
@@ -321,6 +321,14 @@ void central_web_server::run(){
               case web_server::message_type::broadcast_finished:
                 store.free_item(data.item_idx);
                 break;
+              case web_server::message_type::radio_client_left: {
+                int server_id = data.additional_info/2;
+                if((double)server_id == (double)data.additional_info/2){ // since the audio end point is broadcast_channel_id/2, and metadata is broadcast_channel_id/2 + 1
+                  audio_server *inst = audio_server::instance(server_id);
+                  inst->num_listeners--;
+                }
+                break;
+              }
               case web_server::message_type::new_radio_client: {
                 std::vector<char> response_data_first{};
                 std::vector<char> response_data_second{};
@@ -346,6 +354,7 @@ void central_web_server::run(){
                   if(connection_type == "audio_broadcast"){
                     response_data_first = inst->main_thread_state.second_last_broadcast_audio_data; // since this would be the 2nd last item, so send it first
                     response_data_second = inst->main_thread_state.last_broadcast_audio_data; // and this would be the last item, so send it after that
+                    inst->num_listeners++;
                   }else if(connection_type == "metadata_only"){
                     response_data_first = inst->main_thread_state.second_last_broadcast_metadata_only; // since this would be the 2nd last item, so send it first
                     response_data_second = inst->main_thread_state.last_broadcast_metadata_only; // and this would be the last item, so send it after that
@@ -375,7 +384,15 @@ void central_web_server::run(){
                 break;
               }
               case web_server::message_type::skip_request: {
-
+                if(audio_server::server_id_map.count(data.additional_str)){
+                  audio_server* audio_server_inst = audio_server::instance(audio_server::server_id_map[data.additional_str]);
+                  audio_server_inst->send_request_to_skip_to_audio_server(data.additional_str2, data.item_idx, req->custom_info); // custom info is the thread_id
+                }else{
+                  std::string response = default_plain_text_http_header + "FAILURE";
+                  std::vector<char> buff{response.begin(), response.end()};
+                  server.post_skip_request_response_to_server(data.item_idx, std::move(buff));
+                }
+                break;
               }
               case web_server::message_type::request_audio_list: {
                 std::string response = default_plain_text_http_header;
@@ -463,6 +480,7 @@ void central_web_server::audio_server_initialise_reads(audio_server *server){
   add_event_read_req(server->file_request_fd, central_web_server_event::AUDIO_SERVER_COMMUNICATION, server->id);
   add_event_read_req(server->broadcast_fd, central_web_server_event::AUDIO_SERVER_COMMUNICATION, server->id);
 	add_event_read_req(server->audio_req_response_fd, central_web_server_event::AUDIO_SERVER_COMMUNICATION, server->id);
+	add_event_read_req(server->request_skip_response_fd, central_web_server_event::AUDIO_SERVER_COMMUNICATION, server->id);
 
 	server->request_audio_list(); // put in a request for the audio list
 }
@@ -573,6 +591,11 @@ void central_web_server::audio_server_event_req_handler(int eventfd, int server_
         item_metadata_only.idx,
         server_id*2+1
       );
+  }else if(eventfd == server->request_skip_response_fd){
+    auto data = server->get_request_to_skip_response_data();
+    std::string response = default_plain_text_http_header + data.resp_str;
+    std::vector<char> buff{response.begin(), response.end()};
+    thread_data_container[data.thread_id].server.post_skip_request_response_to_server(data.client_idx, std::move(buff));
   }
 }
 

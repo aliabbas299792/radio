@@ -47,9 +47,8 @@ body{
 
 #skip_button{
   width: 100%;
-  margin: 10px;
+  margin-bottom: 5px;
   text-align: center;
-  transform: translate(-10px, 0);
 }
 
 #top_right_container {
@@ -57,11 +56,11 @@ body{
   top: 0px;
   right: 0px;
   font-family:sans-serif;
-  padding: 20px;
+  padding: 10px;
   position:fixed;
   z-index: 100;
   user-select: none;
-  min-width: 200px;
+  min-width: 180px;
 }
 
 #playing{

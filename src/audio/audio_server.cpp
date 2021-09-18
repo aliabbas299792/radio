@@ -128,13 +128,19 @@ void audio_server::run(){
         auto data = get_request_to_skip_data();
 
         if(request_skip_ips.count(data.ip)){
-          respond_to_request_to_skip(false, data.client_idx, data.thread_id);
+          respond_to_request_to_skip("FAILURE:Can't vote twice on the same track", data.client_idx, data.thread_id);
         }else{
           request_skip_ips.insert(data.ip);
 
-
-
-          respond_to_request_to_skip(true, data.client_idx, data.thread_id);
+          if(num_skip_votes + 1 >= ceil((double)num_listeners.load()/2)){
+            skip_track = true;
+            skipped_track_metadata_info = true;
+            respond_to_request_to_skip("SUCCESS", data.client_idx, data.thread_id);
+            current_audio_finish_time = std::chrono::system_clock::now();
+          }else{
+            num_skip_votes++;
+            respond_to_request_to_skip("FAILURE:Skip votes: " + std::to_string((int)ceil((double)num_listeners.load()/2)) + "/" + std::to_string(num_skip_votes) + ")", data.client_idx, data.thread_id);
+          }
         }
 
         fd_read_req(request_skip_fd, audio_events::REQUEST_SKIP);
@@ -220,7 +226,7 @@ combined_data_chunk audio_server::get_broadcast_data(){
 }
 
 void audio_server::broadcast_routine(){
-  if(currently_processing_audio == "" && std::chrono::system_clock::now() >= current_audio_finish_time - std::chrono::milliseconds(BROADCAST_INTERVAL_MS)){
+  if(currently_processing_audio == "" && (std::chrono::system_clock::now() >= current_audio_finish_time - std::chrono::milliseconds(BROADCAST_INTERVAL_MS) || skip_track)){ // natural way to skip
     // if there are less than BROADCAST_INTERVAL_MS long till the end of this file, and nothing is currently being
     currently_processing_audio = get_requested_audio();
     if(currently_processing_audio == ""){ // if there was nothing in the requested queue
@@ -241,6 +247,16 @@ void audio_server::broadcast_routine(){
         currently_processing_audio = audio_list[idx];
       }
     }
+
+    // reset skip stuff
+    if(skip_track){
+      chunks_of_audio.clear();
+      skip_track = false;
+      std::cout << dir_path + currently_processing_audio + ".opus" << "\n";
+    }
+    num_skip_votes = 0;
+    request_skip_ips.clear();
+
     // at this point currently_processing_audio is definitely not blank
     send_file_request_to_program(dir_path + currently_processing_audio + ".opus"); // requests a file to be read
   }
@@ -271,6 +287,9 @@ void audio_server::broadcast_routine(){
     metadata_only_chunk["title"] = chunk.title;
     metadata_only_chunk["start_offset"] = chunk.start_offset;
     metadata_only_chunk["total_length"] = chunk.total_length;
+    metadata_only_chunk["num_listeners"] = num_listeners.load();
+    metadata_only_chunk["skipped_track"] = skipped_track_metadata_info;
+    skipped_track_metadata_info = false; // reset this signal to the default value
     broadcast_to_central_server(data_chunk.dump(), metadata_only_chunk.dump(), chunk.title);
   }
 }
@@ -372,7 +391,7 @@ void audio_server::process_audio(file_transfer_data &&data){
   free(path_dup_original);
   filename = filename.substr(0, filename.size() - 5); // we know the extension is .opus, so we remove the last 5 characters
 
-  bool is_chunks_of_audio_empty = chunks_of_audio.size() == 0;
+  bool is_chunks_of_audio_small = chunks_of_audio.size() <= 2;
 
   uint64_t duration_of_audio = 0;
   for(const auto& page : audio_data)
@@ -408,8 +427,10 @@ void audio_server::process_audio(file_transfer_data &&data){
 
   broadcast_routine();
 
-  if(is_chunks_of_audio_empty)
+  if(is_chunks_of_audio_small){
     broadcast_routine(); // extra broadcast routine if there is not enough data
+    broadcast_routine(); // extra broadcast routine if there is not enough data
+  }
 }
 
 void audio_server::respond_with_file_list(){
@@ -511,8 +532,8 @@ void audio_server::send_request_to_skip_to_audio_server(const std::string &ip, i
   eventfd_write(request_skip_fd, 1);
 }
 
-void audio_server::respond_to_request_to_skip(bool success, int client_idx, int thread_id){
-	request_to_skip_response_queue.emplace(client_idx, thread_id, "", success);
+void audio_server::respond_to_request_to_skip(std::string resp_str, int client_idx, int thread_id){
+	request_to_skip_response_queue.emplace(client_idx, thread_id, "", resp_str);
 	eventfd_write(request_skip_response_fd, 1);
 }
 

@@ -214,6 +214,15 @@ namespace web_server{
       eventfd_write(central_communication_fd, 1); //notify the program thread using our eventfd
     }
 
+    void post_radio_client_left_to_server(int broadcast_channel_id){ // only used to indicate number listening to station has decreased
+      if(!tcp_server) return; // need this stuff set before posting any messages
+      message_post_data data;
+      data.msg_type = message_type::radio_client_left;
+      data.additional_info = broadcast_channel_id;
+      to_program_queue.enqueue(std::move(data));
+      eventfd_write(central_communication_fd, 1); //notify the program thread using our eventfd
+    }
+
     void post_new_radio_client_response_to_server(int ws_client_idx, int ws_client_id, std::vector<char> &&buff, int broadcast_channel_id = -1){
       if(!tcp_server) return; // need this stuff set before posting any messages
       message_post_data data;
@@ -227,7 +236,7 @@ namespace web_server{
       tcp_server->notify_event();
     }
 
-    void post_skip_request_to_server(int client_idx, std::string station, std::string ip){
+    void post_skip_request_to_program(int client_idx, std::string station, std::string ip){
       if(!tcp_server) return; // need this stuff set before posting any messages
       message_post_data data;
       data.msg_type = message_type::skip_request;
@@ -236,6 +245,16 @@ namespace web_server{
       data.additional_str2 = ip;
       to_program_queue.enqueue(std::move(data));
       eventfd_write(central_communication_fd, 1);
+    }
+
+    void post_skip_request_response_to_server(int client_idx, std::vector<char> &&buff){
+      if(!tcp_server) return; // need this stuff set before posting any messages
+      message_post_data data;
+      data.msg_type = message_type::skip_request_response;
+      data.item_idx = client_idx;
+      data.buff = buff;
+      to_server_queue.enqueue(std::move(data));
+      tcp_server->notify_event();
     }
     
     void post_audio_list_req_to_program(int client_idx, std::string station){

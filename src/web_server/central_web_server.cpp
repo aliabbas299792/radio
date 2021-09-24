@@ -77,14 +77,21 @@ void central_web_server::start_server(const char *config_file_path){
     int shrink_by = 0;
     const auto length = line.size();
     for(int i = 0; i < length; i++){ //removes whitespace
-      if(line[i] ==  ' ')
+      if(line[i] ==  ' '){
         shrink_by++;
-      else
+      }else{
         line[i-shrink_by] = line[i];
+      }
     }
-    if(shrink_by)
+
+    if(shrink_by != 0){
       line[length-shrink_by] = 0; //sets the byte immediately after the last content byte to NULL so that strtok_r stops there
-    if(line[0] == '#') continue; //this is a comment line, so ignore it
+    }
+
+    if(line[0] == '#') {
+      continue; //this is a comment line, so ignore it
+    }
+
     char *saveptr = nullptr;
     std::string key = strtok_r(&line[0], ":", &saveptr);
     std::string value = strtok_r(nullptr, ":", &saveptr);
@@ -512,7 +519,7 @@ void central_web_server::audio_server_event_req_handler(int eventfd, int server_
     auto data = server->get_from_audio_file_list_data_queue();
 
     if(data.addition){
-      if(server->main_thread_state.slash_separated_audio_list != ""){
+      if(server->main_thread_state.slash_separated_audio_list.empty()){
         server->main_thread_state.slash_separated_audio_list += "/"+data.appropriate_str;
       }else{
         server->main_thread_state.slash_separated_audio_list = data.appropriate_str;

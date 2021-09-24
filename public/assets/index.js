@@ -616,7 +616,7 @@ skip_button.addEventListener('click', () => [
       successful_action_popup(data.replace("FAILURE:", "Failure: "), true)
     } else {
       successful_action_popup("Succesfully skipped");
-      pre_skip_gain_value = player.gain_node.gain.value;
+      pre_skip_gain_value = player.current_volume;
       set_volume(0); // to prevent clipping
       clear_queued_chunks();
       audio_metadata.total_length = 1;

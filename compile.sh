@@ -6,6 +6,8 @@ cd src
 rm -rf server
 cmake \
   -GNinja \
+  -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+  -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
   -B ../build \
   -DSOURCE_FILES="$SOURCE_FILES" \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=1

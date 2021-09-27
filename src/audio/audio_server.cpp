@@ -167,10 +167,14 @@ void audio_server::run(){
 
 					filename = filename.substr(0, filename.size()-5); // remove the .opus extension
 
-          if(data->mask & IN_CREATE || data->mask & IN_MOVED_TO){
-            slash_separated_audio_list += "/" + filename;
+          if(((data->mask & IN_CREATE) != 0U) || ((data->mask & IN_MOVED_TO) != 0U)){
+            if(!slash_separated_audio_list.empty())
+              slash_separated_audio_list += "/" + filename;
+            else
+             slash_separated_audio_list = filename;
+            
             audio_list.push_back(filename);
-            post_audio_list_update(true, filename); // we've added a file
+            post_audio_list_update(true, slash_separated_audio_list); // we've added a file
             file_set.insert(filename);
           }else{
             audio_list.erase(std::remove(audio_list.begin(), audio_list.end(), filename), audio_list.end()); // remove the deleted file
@@ -438,8 +442,8 @@ void audio_server::respond_with_file_list(){
   eventfd_write(notify_audio_list_available, 1); // notify the main thread we've pushed something
 }
 
-void audio_server::post_audio_list_update(const bool addition, const std::string &file_name){
-  audio_file_list_data_queue.emplace(file_name, addition); // either adding or removing a file
+void audio_server::post_audio_list_update(const bool addition, const std::string &appropriate_str){
+  audio_file_list_data_queue.emplace(appropriate_str, addition); // either adding or removing a file
   eventfd_write(audio_list_update, 1); // notify the main thread that we've pushed an update
 }
 

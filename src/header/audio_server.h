@@ -210,7 +210,7 @@ public:
   int send_audio_list = eventfd(0, 0); // asks the audio_server to send the audio list
   int notify_audio_list_available = eventfd(0, 0); // tells the program that we've queued some data
   int audio_list_update = eventfd(0, 0); // tell the program there is a change in the audio
-  void post_audio_list_update(const bool addition, const std::string &file_name);
+  void post_audio_list_update(const bool addition, const std::string &appropriate_str);
   void request_audio_list();
   audio_file_list_data get_from_audio_file_list_data_queue();
 

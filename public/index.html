@@ -36,7 +36,7 @@
       </div>
     </div>
     <div id="volume_control_container">
-      <input type="range" min="1" max="100" value="100" id="volume_control">
+      <input type="range" min="1" max="200" value="100" id="volume_control">
     </div>
     <audio id="dummy_audio" loop>
       <source src="assets/silence.mp3" type="audio/mp3"> <!-- a hack to use the media session API -->
@@ -122,6 +122,21 @@
         num_listeners.innerText = `Listeners: ${e.detail}`;
       })
 
+      document.addEventListener('keydown', e => {
+        switch (e.keyCode) {
+          case 32: // spacebar
+            toggleAudio();
+            play_btn_click();
+            break;
+          case 38: // up button
+            change_volume_by_value(10);
+            break;
+          case 40: // down button
+            change_volume_by_value(-10);
+            break;
+        }
+      })
+
       function set_alert(msg, element){
         element.innerText = msg;
         element.style.opacity = 1;
@@ -158,7 +173,7 @@
         let vol = volume_control.value;
         if(vol == 1)
           vol = 0;
-        set_volume(vol/100);
+        set_volume(vol);
       })
       
       volume_btn.addEventListener('click', toggle_volume_control);

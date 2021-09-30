@@ -297,12 +297,13 @@ function toggleAudio(force_pause) {
     clearTimeout(toggle_audio_timeout)
     end_audio()
 
+    player.audio_ws = new WebSocket(`wss://${window.location.host}/ws/radio/${current_station_data.name}/audio_broadcast`)
+
     player.context = new AudioContext()
     player.analyser_node = createAnalyserNode(player.context)
     player.gain_node = createGainNode(player.context)
-    player.gain_node.gain.value = player.current_volume;
+    set_volume(player.current_volume)
 
-    player.audio_ws = new WebSocket(`wss://${window.location.host}/ws/radio/${current_station_data.name}/audio_broadcast`)
     player.audio_ws.onmessage = msg => {
       if (msg.data == "INVALID_ENDPOINT" || msg.data == "INVALID_STATION") {
         if (msg.data == "INVALID_STATION") {
@@ -434,10 +435,38 @@ function animationLoop() {
 }
 
 function set_volume(vol) {
-  if (player.context && player.gain_node)
-    player.gain_node.gain.linearRampToValueAtTime(vol, player.context.currentTime + 0.1)
-  player.current_volume = vol
-  window.localStorage.setItem("volume", vol)
+  const original_vol = vol;
+  const normalised_vol = original_vol / 100;
+  let volume = normalised_vol;
+
+  // piecewise functions used for gradually changing volume
+  // y = { 200 >= x > 150 : 1.04^(x-150)}
+  // y = { 150 >= x >= 60 : x/100 - 0.5}
+  // y = { 60 > x >= 0 : 0.0104566441123 * (1.04^x - 1)}
+
+  if(original_vol > 150){
+    volume = Math.pow(1.04, original_vol - 150); // above 100, exponentially higher
+  }else if(original_vol < 60){
+    volume = 0.0104566441123 * (Math.pow(1.04, original_vol) - 1);
+  }else{
+    volume -= 0.5;
+  }
+
+  if (player.context && player.gain_node && player.audio_ws != undefined)
+    player.gain_node.gain.linearRampToValueAtTime(volume, player.context.currentTime + 0.1)
+
+  player.current_volume = original_vol;
+  window.localStorage.setItem("volume", original_vol);
+  
+  if(volume_control.value != original_vol){
+    volume_control.value = original_vol;
+  }
+}
+
+function change_volume_by_value(value){
+  const current_vol = player.current_volume;
+  const new_vol = Math.min(200, Math.max(0.001, Number(current_vol) + Number(value)));
+  set_volume(new_vol);
 }
 
 const interpolateColoursColours = {
@@ -465,8 +494,8 @@ window.addEventListener("load", () => {
   resize();
 
   // also volume doesn't default to 0
-  player.current_volume = window.localStorage.getItem("volume") ? Number(window.localStorage.getItem("volume")) : 1 // get volume from the local storage
-  volume_control.value = Math.max(1, player.current_volume * 100) // sets the volume_control element's value
+  player.current_volume = window.localStorage.getItem("volume") ? Number(window.localStorage.getItem("volume")) : 100 // get volume from the local storage
+  volume_control.value = Math.max(1, player.current_volume) // sets the volume_control element's value
 
   fetch("/broadcast_metadata").then(data => data.text()).then(metadata => {
     broadcast_metadata = Object.fromEntries(metadata.replace(/ /g, "").split("\n").map(item => [item.split(":")[0], Number(item.split(":")[1])]));

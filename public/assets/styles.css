@@ -210,7 +210,7 @@ input[type=range]::-ms-thumb {
 }
 
 #volume_control_container input {
-  background: #ffffff94;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.7) 0%, rgba(255,255,255,0.7) 75%, rgba(255,109,28,0.7) 75%, rgba(240,18,18,0.7) 100%);
 }
 
 #stations {

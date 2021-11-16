@@ -123,6 +123,7 @@ const player = {
   buffer_source_nodes: []
 }
 
+first_pcm_play = true;
 function playPCM(arrayBuffer, start_offset) { //plays interleaved linear PCM with 16 bit, bit depth
   const int32array = new Int32Array(arrayBuffer);
   const channels = 2;
@@ -167,13 +168,16 @@ function playPCM(arrayBuffer, start_offset) { //plays interleaved linear PCM wit
   buffer.getChannelData(1).set(floatsR);
 
   const current_time = player.context.currentTime;
-  const metadata_time_diff = audio_metadata.time_in_audio() - start_offset;
-  let play_offset = 0;
   if (player.current_page_time < current_time) { //ensures that the current time never lags behind context.currentTime
-    player.current_page_time = current_time;
-    play_offset = metadata_time_diff / 1000; // only corrects the playback difference very occasionally now
+    player.current_page_time = current_time + 0.1;
   }
 
+  const metadata_time_diff = audio_metadata.time_in_audio() - start_offset;
+  let play_offset = 0;
+  if (first_pcm_play) {
+    first_pcm_play = false;
+    play_offset = metadata_time_diff / 1000; // only corrects the playback difference at the start for now
+  }
 
   // console.log(metadata_time_diff, start_offset, audio_metadata.time_ms, play_offset, buffer.duration - play_offset)
 

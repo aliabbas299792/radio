@@ -27,11 +27,8 @@ function updateMetadata(title) {
 }
 
 // globals for timing
-let last_play_start_time = 0;
-function time() {
-  return Date.now() - last_play_start_time; // time elapsed since the page loaded
-}
-
+let last_play_start_time = Date.now();
+const time = () => Date.now() - last_play_start_time; // time elapsed since the page loaded
 const to_presentable_time = ms => {
   if (ms >= 60000)
     return `${Math.floor(ms / 60000)}m ${Math.floor((ms / 1000) % 60)}s`
@@ -116,15 +113,18 @@ const player = {
   // internals
   context: new AudioContext(),
   typed_array_previous: new Uint8Array(),
-  current_page_time: 0,
   gain_node: undefined,
   analyser_node: undefined,
   current_volume: 1,
-  buffer_source_nodes: []
+  buffer_source_nodes: [],
+  current_page_time: 0, // in seconds
+  current_track_start_time: 0, // in seconds
+  player_current_track_time: function () { // in milliseconds
+    return (player.current_page_time - player.current_track_start_time) * 1000
+  }
 }
 
-first_pcm_play = true;
-function playPCM(arrayBuffer, start_offset) { //plays interleaved linear PCM with 16 bit, bit depth
+function playPCM(arrayBuffer, start_offset) {  //plays interleaved linear PCM with 16 bit, bit depth
   const int32array = new Int32Array(arrayBuffer);
   const channels = 2;
   const sampleRate = 48000;
@@ -172,18 +172,13 @@ function playPCM(arrayBuffer, start_offset) { //plays interleaved linear PCM wit
     player.current_page_time = current_time + 0.1;
   }
 
-  const metadata_time_diff = audio_metadata.time_in_audio() - start_offset;
-  let play_offset = 0;
-  if (first_pcm_play) {
-    first_pcm_play = false;
-    play_offset = metadata_time_diff / 1000; // only corrects the playback difference at the start for now
-  }
-
-  // console.log(metadata_time_diff, start_offset, audio_metadata.time_ms, play_offset, buffer.duration - play_offset)
-
   const source = player.context.createBufferSource();
   source.buffer = buffer;
-  source.start(player.current_page_time, play_offset);
+  source.start(player.current_page_time);
+
+  if (player.buffer_source_nodes.length == 0 || start_offset == 0) { // so we have a way of knowing when the track starts
+    player.current_track_start_time = time() / 1000;
+  }
 
   for (let i = 0; i < player.buffer_source_nodes.length; i++) { // removes old elements
     if (player.buffer_source_nodes[i].time < current_time) {
@@ -192,7 +187,7 @@ function playPCM(arrayBuffer, start_offset) { //plays interleaved linear PCM wit
   }
   player.buffer_source_nodes.push({ time: player.current_page_time, node: source });
 
-  player.current_page_time += Math.round((buffer.duration - play_offset) * 100) / 100; //2dp
+  player.current_page_time += Math.round(buffer.duration * 100) / 100; //2dp
 
   source.connect(player.gain_node)
   player.gain_node.connect(player.analyser_node)
@@ -261,25 +256,26 @@ function update_playing(text, total_length, force) {
   clearTimeout(timeout_for_next_track)
 
   if (force) {
-    last_play_start_time = Date.now() + 150;
     audio_metadata.relative_start_time = time()
     audio_metadata.total_length = total_length
-    // this is just to make sure the progress and audio is synced up
     updateMetadata(text);
     return player.playing_audio_el.innerHTML = text;
   }
 
 
   timeout_for_next_track = setTimeout(() => {
-    last_play_start_time = Date.now() + 150;
     if (player.playing_audio_el.innerHTML != "Loading...")
       audio_metadata.relative_start_time = time()
 
     audio_metadata.total_length = total_length
     player.playing_audio_el.innerHTML = text;
-    // this is just to make sure the progress and audio is synced up
     updateMetadata(text);
-  }, audio_metadata.time_left_in_audio()) // once this has finished, this is the next title
+  },
+    Math.max( // so they start in sync
+      audio_metadata.time_left_in_audio(),
+      player.player_current_track_time()
+    )
+  ) // once this has finished, this is the next title
 }
 
 function end_audio() {
@@ -573,13 +569,12 @@ function start_metadata_connection() {
       just_started = false;
       audio_metadata.relative_start_time = -metadata.start_offset;
     }
-
-    // console.log("Metadata: ", audio_metadata.time_ms - audio_metadata.time_in_audio())
   }
 }
 
 function stop_metadata_connection() {
   // radio connection to the other station starts now
+  last_play_start_time = Date.now()
   player.playing_audio_el.innerHTML = "Loading...";
   if (audio_metadata.metadata_ws)
     audio_metadata.metadata_ws.close()

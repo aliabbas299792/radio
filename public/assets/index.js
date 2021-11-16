@@ -27,8 +27,11 @@ function updateMetadata(title) {
 }
 
 // globals for timing
-let last_play_start_time = Date.now();
-const time = () => Date.now() - last_play_start_time; // time elapsed since the page loaded
+let last_play_start_time = 0;
+function time() {
+  return Date.now() - last_play_start_time; // time elapsed since the page loaded
+}
+
 const to_presentable_time = ms => {
   if (ms >= 60000)
     return `${Math.floor(ms / 60000)}m ${Math.floor((ms / 1000) % 60)}s`
@@ -164,15 +167,13 @@ function playPCM(arrayBuffer, start_offset) { //plays interleaved linear PCM wit
   buffer.getChannelData(1).set(floatsR);
 
   const current_time = player.context.currentTime;
-  if (player.current_page_time < current_time) { //ensures that the current time never lags behind context.currentTime
-    player.current_page_time = current_time + 0.1;
-  }
-
   const metadata_time_diff = audio_metadata.time_in_audio() - start_offset;
   let play_offset = 0;
-  if (metadata_time_diff > 0) { // if there is a difference between the metadata time and audio time, play at an offset
-    play_offset = metadata_time_diff / 1000;
+  if (player.current_page_time < current_time) { //ensures that the current time never lags behind context.currentTime
+    player.current_page_time = current_time;
+    play_offset = metadata_time_diff / 1000; // only corrects the playback difference very occasionally now
   }
+
 
   // console.log(metadata_time_diff, start_offset, audio_metadata.time_ms, play_offset, buffer.duration - play_offset)
 
@@ -256,19 +257,23 @@ function update_playing(text, total_length, force) {
   clearTimeout(timeout_for_next_track)
 
   if (force) {
+    last_play_start_time = Date.now() + 150;
     audio_metadata.relative_start_time = time()
     audio_metadata.total_length = total_length
+    // this is just to make sure the progress and audio is synced up
     updateMetadata(text);
     return player.playing_audio_el.innerHTML = text;
   }
 
 
   timeout_for_next_track = setTimeout(() => {
+    last_play_start_time = Date.now() + 150;
     if (player.playing_audio_el.innerHTML != "Loading...")
       audio_metadata.relative_start_time = time()
 
     audio_metadata.total_length = total_length
     player.playing_audio_el.innerHTML = text;
+    // this is just to make sure the progress and audio is synced up
     updateMetadata(text);
   }, audio_metadata.time_left_in_audio()) // once this has finished, this is the next title
 }
@@ -526,7 +531,6 @@ window.addEventListener("load", () => {
   requestAnimationFrame(animationLoop);
 })
 
-let first_load = true; // only to run a function for the first load
 function start_metadata_connection() {
   let just_started = true;
   audio_metadata.metadata_ws = new WebSocket(`wss://${window.location.host}/ws/radio/${current_station_data.name}/metadata_only`)
@@ -561,11 +565,6 @@ function start_metadata_connection() {
 
     update_num_listeners(metadata.num_listeners);
 
-    if (first_load) {
-      last_play_start_time = Date.now(); // this is just to make sure the progress and audio is synced up
-      first_load = false;
-    }
-
     if (just_started) {
       just_started = false;
       audio_metadata.relative_start_time = -metadata.start_offset;
@@ -577,7 +576,6 @@ function start_metadata_connection() {
 
 function stop_metadata_connection() {
   // radio connection to the other station starts now
-  last_play_start_time = Date.now()
   player.playing_audio_el.innerHTML = "Loading...";
   if (audio_metadata.metadata_ws)
     audio_metadata.metadata_ws.close()

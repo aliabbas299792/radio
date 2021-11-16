@@ -60,7 +60,7 @@ body{
   position:fixed;
   z-index: 100;
   user-select: none;
-  min-width: 180px;
+  min-width: 220px;
 }
 
 #playing{

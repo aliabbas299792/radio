@@ -120,7 +120,7 @@ const player = {
   buffer_source_nodes: []
 }
 
-function playPCM(arrayBuffer) { //plays interleaved linear PCM with 16 bit, bit depth
+function playPCM(arrayBuffer, start_offset) { //plays interleaved linear PCM with 16 bit, bit depth
   const int32array = new Int32Array(arrayBuffer);
   const channels = 2;
   const sampleRate = 48000;
@@ -168,9 +168,17 @@ function playPCM(arrayBuffer) { //plays interleaved linear PCM with 16 bit, bit 
     player.current_page_time = current_time + 0.1;
   }
 
+  const metadata_time_diff = audio_metadata.time_in_audio() - start_offset;
+  let play_offset = 0;
+  if (metadata_time_diff > 0) { // if there is a difference between the metadata time and audio time, play at an offset
+    play_offset = metadata_time_diff / 1000;
+  }
+
+  // console.log(metadata_time_diff, start_offset, audio_metadata.time_ms, play_offset, buffer.duration - play_offset)
+
   const source = player.context.createBufferSource();
   source.buffer = buffer;
-  source.start(player.current_page_time);
+  source.start(player.current_page_time, play_offset);
 
   for (let i = 0; i < player.buffer_source_nodes.length; i++) { // removes old elements
     if (player.buffer_source_nodes[i].time < current_time) {
@@ -179,7 +187,7 @@ function playPCM(arrayBuffer) { //plays interleaved linear PCM with 16 bit, bit 
   }
   player.buffer_source_nodes.push({ time: player.current_page_time, node: source });
 
-  player.current_page_time += Math.round(buffer.duration * 100) / 100; //2dp
+  player.current_page_time += Math.round((buffer.duration - play_offset) * 100) / 100; //2dp
 
   source.connect(player.gain_node)
   player.gain_node.connect(player.analyser_node)
@@ -196,7 +204,7 @@ function clear_queued_chunks() {
   player.buffer_source_nodes = []
 }
 
-async function playMusic(typedArrayCurrent) { //takes 1 packet of audio, decode, and then plays it
+async function playMusic(typedArrayCurrent, start_offset) { //takes 1 packet of audio, decode, and then plays it
   let allocatedCurrentBufferPtr = 0, allocatedPreviousBufferPtr = 0;
   let decodedCurrentBufferPtr;
 
@@ -231,7 +239,7 @@ async function playMusic(typedArrayCurrent) { //takes 1 packet of audio, decode,
     // slice creates a copy of the data, so we don't need this ptr after this bit, hence freed below
     const outputArrayBuffer = Module.HEAP8.slice(decodedCurrentBufferPtr, decodedCurrentBufferPtr + output_len).buffer;
 
-    playPCM(outputArrayBuffer); //output array buffer contains decoded audio
+    playPCM(outputArrayBuffer, start_offset); //output array buffer contains decoded audio
   } catch (err) {
     console.log("Error: " + err);
   } finally {
@@ -327,7 +335,7 @@ function toggleAudio(force_pause) {
         if (audio_data.start_offset + prev_durations > audio_metadata.time_in_audio() - 1000
           || audio_data.start_offset + prev_durations < audio_metadata.time_in_audio() - 20000) {
           arr = new Uint8Array(page.buff)
-          playMusic(arr)
+          playMusic(arr, audio_data.start_offset + prev_durations) // pass the start offset of each page
         }
         prev_durations += page.duration;
       }
@@ -444,11 +452,11 @@ function set_volume(vol) {
   // y = { 150 >= x >= 60 : x/100 - 0.5}
   // y = { 60 > x >= 0 : 0.0104566441123 * (1.04^x - 1)}
 
-  if(original_vol > 150){
+  if (original_vol > 150) {
     volume = Math.pow(1.04, original_vol - 150); // above 100, exponentially higher
-  }else if(original_vol < 60){
+  } else if (original_vol < 60) {
     volume = 0.0104566441123 * (Math.pow(1.04, original_vol) - 1);
-  }else{
+  } else {
     volume -= 0.5;
   }
 
@@ -457,13 +465,13 @@ function set_volume(vol) {
 
   player.current_volume = original_vol;
   window.localStorage.setItem("volume", original_vol);
-  
-  if(volume_control.value != original_vol){
+
+  if (volume_control.value != original_vol) {
     volume_control.value = original_vol;
   }
 }
 
-function change_volume_by_value(value){
+function change_volume_by_value(value) {
   const current_vol = player.current_volume;
   const new_vol = Math.min(200, Math.max(0.001, Number(current_vol) + Number(value)));
   set_volume(new_vol);
@@ -493,8 +501,16 @@ function interpolateColours(top, bottom, ratio) { //https://stackoverflow.com/a/
 window.addEventListener("load", () => {
   resize();
 
+  // some people were having issues since I changed the audio, this will mean the default audio is set to the correct value on their device
+  let is_new_update = true;
+  if (window.localStorage.getItem("update02oct2021") != "true") {
+    is_new_update = false;
+    window.localStorage.setItem("update02oct2021", "true");
+  }
+
   // also volume doesn't default to 0
-  player.current_volume = window.localStorage.getItem("volume") ? Number(window.localStorage.getItem("volume")) : 100 // get volume from the local storage
+  // volume is set to 150 by default
+  player.current_volume = window.localStorage.getItem("volume") && is_new_update ? Number(window.localStorage.getItem("volume")) : 150 // get volume from the local storage
   volume_control.value = Math.max(1, player.current_volume) // sets the volume_control element's value
 
   fetch("/broadcast_metadata").then(data => data.text()).then(metadata => {
@@ -510,6 +526,7 @@ window.addEventListener("load", () => {
   requestAnimationFrame(animationLoop);
 })
 
+let first_load = true; // only to run a function for the first load
 function start_metadata_connection() {
   let just_started = true;
   audio_metadata.metadata_ws = new WebSocket(`wss://${window.location.host}/ws/radio/${current_station_data.name}/metadata_only`)
@@ -544,10 +561,17 @@ function start_metadata_connection() {
 
     update_num_listeners(metadata.num_listeners);
 
+    if (first_load) {
+      last_play_start_time = Date.now(); // this is just to make sure the progress and audio is synced up
+      first_load = false;
+    }
+
     if (just_started) {
       just_started = false;
       audio_metadata.relative_start_time = -metadata.start_offset;
     }
+
+    // console.log("Metadata: ", audio_metadata.time_ms - audio_metadata.time_in_audio())
   }
 }
 

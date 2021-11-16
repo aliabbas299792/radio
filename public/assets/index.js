@@ -113,18 +113,14 @@ const player = {
   // internals
   context: new AudioContext(),
   typed_array_previous: new Uint8Array(),
+  current_page_time: 0,
   gain_node: undefined,
   analyser_node: undefined,
   current_volume: 1,
-  buffer_source_nodes: [],
-  current_page_time: 0, // in seconds
-  current_track_start_time: 0, // in seconds
-  player_current_track_time: function () { // in milliseconds
-    return (player.current_page_time - player.current_track_start_time) * 1000
-  }
+  buffer_source_nodes: []
 }
 
-function playPCM(arrayBuffer, start_offset) {  //plays interleaved linear PCM with 16 bit, bit depth
+function playPCM(arrayBuffer) { //plays interleaved linear PCM with 16 bit, bit depth
   const int32array = new Int32Array(arrayBuffer);
   const channels = 2;
   const sampleRate = 48000;
@@ -176,10 +172,6 @@ function playPCM(arrayBuffer, start_offset) {  //plays interleaved linear PCM wi
   source.buffer = buffer;
   source.start(player.current_page_time);
 
-  if (player.buffer_source_nodes.length == 0 || start_offset == 0) { // so we have a way of knowing when the track starts
-    player.current_track_start_time = time() / 1000;
-  }
-
   for (let i = 0; i < player.buffer_source_nodes.length; i++) { // removes old elements
     if (player.buffer_source_nodes[i].time < current_time) {
       player.buffer_source_nodes.splice(i, 1)
@@ -204,7 +196,7 @@ function clear_queued_chunks() {
   player.buffer_source_nodes = []
 }
 
-async function playMusic(typedArrayCurrent, start_offset) { //takes 1 packet of audio, decode, and then plays it
+async function playMusic(typedArrayCurrent) { //takes 1 packet of audio, decode, and then plays it
   let allocatedCurrentBufferPtr = 0, allocatedPreviousBufferPtr = 0;
   let decodedCurrentBufferPtr;
 
@@ -239,7 +231,7 @@ async function playMusic(typedArrayCurrent, start_offset) { //takes 1 packet of 
     // slice creates a copy of the data, so we don't need this ptr after this bit, hence freed below
     const outputArrayBuffer = Module.HEAP8.slice(decodedCurrentBufferPtr, decodedCurrentBufferPtr + output_len).buffer;
 
-    playPCM(outputArrayBuffer, start_offset); //output array buffer contains decoded audio
+    playPCM(outputArrayBuffer); //output array buffer contains decoded audio
   } catch (err) {
     console.log("Error: " + err);
   } finally {
@@ -270,12 +262,7 @@ function update_playing(text, total_length, force) {
     audio_metadata.total_length = total_length
     player.playing_audio_el.innerHTML = text;
     updateMetadata(text);
-  },
-    Math.max( // so they start in sync
-      audio_metadata.time_left_in_audio(),
-      player.player_current_track_time()
-    )
-  ) // once this has finished, this is the next title
+  }, audio_metadata.time_left_in_audio()) // once this has finished, this is the next title
 }
 
 function end_audio() {
@@ -340,7 +327,7 @@ function toggleAudio(force_pause) {
         if (audio_data.start_offset + prev_durations > audio_metadata.time_in_audio() - 1000
           || audio_data.start_offset + prev_durations < audio_metadata.time_in_audio() - 20000) {
           arr = new Uint8Array(page.buff)
-          playMusic(arr, audio_data.start_offset + prev_durations) // pass the start offset of each page
+          playMusic(arr)
         }
         prev_durations += page.duration;
       }
